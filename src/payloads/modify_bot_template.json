@@ -1,0 +1,70 @@
+{{
+	"type": "modal",
+	"callback_id": "modify_bot",
+	"title": {{
+		"type": "plain_text",
+		"text": "Modify bot personality",
+		"emoji": true
+	}},
+	"submit": {{
+		"type": "plain_text",
+		"text": "Modify",
+		"emoji": true
+	}},
+	"close": {{
+		"type": "plain_text",
+		"text": "Cancel",
+		"emoji": true
+	}},
+	"blocks": [
+		{{
+			"type": "input",
+			"block_id" : "personality",
+			"element": {{
+				"type": "plain_text_input",
+				"action_id": "personality",
+				"initial_value": "{personality}"
+			}},
+			"label": {{
+				"type": "plain_text",
+				"text": "Bot personality"
+			}}
+		}},
+		{{
+			"type": "input",
+			"block_id" : "instructions",
+			"element": {{
+				"type": "plain_text_input",
+				"action_id": "instructions",
+				"multiline": true,
+				"initial_value": "{instructions}"
+			}},
+			"hint": {{
+				"type": "plain_text",
+				"text": "Example: Coding question are not supported."
+			}},
+			"label": {{
+				"type": "plain_text",
+				"text": "Instructions"
+			}}
+		}},
+		{{
+			"type": "input",
+			"block_id" : "temperature",
+			"element": {{
+				"type": "plain_text_input",
+				"action_id": "temperature",
+				"initial_value": "{temperature}"
+			}},
+			"hint": {{
+				"type": "plain_text",
+				"text": "A number between 0 (concrete) to 1 (creative)"
+
+			}},
+			"label": {{
+				"type": "plain_text",
+				"text": "Temperature"
+			}}
+		}}
+	]
+}}
