@@ -1,6 +1,9 @@
+INITIAL_BOT_PROMPT = (
+    "### Instruction: You are {personality}. {instructions}"
+)
+
 DEFAULT_PROMPT = (
-    "### Instruction: You are an AI assistant. Give helpful and concise answers to the user's questions."
-    " Answers in no more than 40 words."
+    f"{INITIAL_BOT_PROMPT}"
     "\n### Question: {query}"
     "\n### Response: "
     )
@@ -8,4 +11,11 @@ DEFAULT_PROMPT = (
 DEFAULT_QA_PROMPT = (
     "### Instruction: "
 
+)
+
+THREAD_PROMPT = (
+    f"{INITIAL_BOT_PROMPT}"
+    " Now, continue this conversation between users {users} and you with the name \"AI\"."
+    "\n\n\"{conversation}\""
+    "\nAI: "
 )
