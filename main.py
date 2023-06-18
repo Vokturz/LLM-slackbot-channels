@@ -2,8 +2,7 @@ from dotenv import load_dotenv
 from src.slackbot import SlackBot
 from src.handlers import create_handlers
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-
-
+import asyncio
 
 load_dotenv()
 
@@ -23,4 +22,8 @@ bot.initialize_embeddings(model_type)
 
 create_handlers(bot)
 
-bot.start()
+async def start():
+    await bot.start()
+
+if __name__ == "__main__":
+    asyncio.run(start())

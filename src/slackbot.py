@@ -1,6 +1,8 @@
 import logging
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+#from slack_bolt import App
+from slack_bolt.async_app import AsyncApp
+#from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from langchain.llms import (OpenAI, CTransformers, FakeListLLM)
 from langchain.embeddings import (HuggingFaceEmbeddings, FakeEmbeddings)
 import os
@@ -33,8 +35,7 @@ class SlackBot:
         except KeyError as e:
             raise ValueError("Could not find required environment variable") from e
 
-        self.app =  App(token=self.bot_token, name=self.name)
-        self.socket = SocketModeHandler(self.app, self.app_token)
+        self.app =  AsyncApp(token=self.bot_token, name=self.name)
 
         # This could be a class
         default_llm_info = dict(personality=default_personality,
@@ -50,10 +51,18 @@ class SlackBot:
         else:
             self.channels_llm_info = {}
 
-    def get_bot_user_id(self):
-        return self.app.client.auth_test()['user_id']
+    async def start(self) -> None:
+        """
+        Start the SlackBot instance.
 
-    def get_app(self) -> App:
+        Raises:
+            RuntimeError: If the AsyncSocketModeHandler could not start.
+        """
+        response = await self.app.client.auth_test()
+        self.bot_user_id = response["user_id"]
+        await AsyncSocketModeHandler(self.app, self.app_token).start_async()
+
+    def get_app(self):
         return self.app
     
     def get_bot_token(self) -> str:
@@ -61,6 +70,12 @@ class SlackBot:
     
     def get_verbose(self):
         return self.verbose
+    
+    def get_bot_user_id(self):
+        return self.bot_user_id
+    @property
+    def _bot_user_id(self):
+        return self.bot_user_id
     
     def initilize_llm(self, model_type, handler=None,
                        config=dict(temperature=0.8,
@@ -108,28 +123,28 @@ class SlackBot:
         else: # OpenAI
             return self.llm.temperature
         
-    def change_temperature(self, temperature):
+    async def change_temperature(self, temperature):
         if 'model_type' in self.llm.__dict__: # CTransformers
             self.llm.client.config.temperature = temperature
         else: # OpenAI
             self.llm.temperature = temperature 
         
 
-    def define_channel_llm_info(self, channel_id, channel_bot_info):
+    async def define_channel_llm_info(self, channel_id, channel_bot_info):
         self.channels_llm_info[channel_id] = channel_bot_info
         with open(llm_info_file, 'w') as f:
                 json.dump(self.channels_llm_info, f)
 
-    def get_channel_llm_info(self, channel_id):
+    async def get_channel_llm_info(self, channel_id):
         if channel_id not in self.channels_llm_info.keys():
             self.define_channel_llm_info(channel_id, self.default_llm_info) 
         return self.channels_llm_info[channel_id]
 
             
-    def extract_thread_conversation(self, channel_id, thread_ts):
+    async def extract_thread_conversation(self, channel_id, thread_ts):
         client = self.app.client
-        bot_user_id = self.get_bot_user_id()
-        result = client.conversations_replies(channel=channel_id, ts=thread_ts)
+        bot_user_id = self.bot_user_id
+        result = await client.conversations_replies(channel=channel_id, ts=thread_ts)
         messages = result['messages']
         actual_user = ''
         users = set()
@@ -150,17 +165,8 @@ class SlackBot:
                 messages_history[-1] += f'\n{text}'
         return messages_history, users
     
-    def start(self) -> None:
-        """
-        Start the SlackBot instance.
 
-        Raises:
-            RuntimeError: If the SocketModeHandler could not start.
-        """
-        try:
-            self.socket.start()
-        except Exception as e:
-            raise RuntimeError("Could not start the SocketModeHandler") from e
+
 
     # extend Slack Bolt decorators
     def event(self, event_name):

@@ -44,7 +44,7 @@ def get_ask_classifier(embeddings_clf, phrase):
         return 'opinion'
     return classif
 
-def get_llm_reply(bot, say, prompt, query, to_all=False, thread_ts=None):
+async def get_llm_reply(bot, say, prompt, query, to_all=False, thread_ts=None):
     #embd_clf = bot.get_embeddings()[1]
     #classif = get_ask_classifier(embd_clf, query)
     llm = bot.get_llm()
@@ -61,7 +61,7 @@ def get_llm_reply(bot, say, prompt, query, to_all=False, thread_ts=None):
         if bot.get_verbose():
             init_msg += f"(_`temperature={bot.get_temperature()}, n_tokens={n_tokens}`_)"
             #init_msg += f". Your question was classified as *{classif}*_)"
-        initial_message = say(init_msg, thread_ts=thread_ts)
+        initial_message = await say(init_msg, thread_ts=thread_ts)
     else:
         initial_message = None
 
@@ -79,13 +79,13 @@ def get_llm_reply(bot, say, prompt, query, to_all=False, thread_ts=None):
 
 def create_handlers(bot):
     @bot.command("/ask")
-    def ask(ack, respond, command, say, client):
+    async def ask(ack, respond, command, say, client):
         user = command["user_id"]
         channel_id = command['channel_id']
         query = command["text"]
-        channel_llm_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = await bot.get_channel_llm_info(channel_id)
         actual_temp = channel_llm_info['temperature']
-        bot.change_temperature(actual_temp)
+        await bot.change_temperature(actual_temp)
 
         prompt = PromptTemplate(template=prompts.DEFAULT_PROMPT,
                                 input_variables=['personality',
@@ -96,31 +96,31 @@ def create_handlers(bot):
         parsed_query = parse_format_query(query)
         
         if parsed_query['change_temp']:
-                bot.change_temperature(temperature=parsed_query['new_temp'])
+                await bot.change_temperature(temperature=parsed_query['new_temp'])
         if parsed_query['new_temp'] == -1:
                 respond(f"`!temp` only accepts values between 0 and 1."
                         f" Using current value of `{actual_temp}`")
-        ack()
-        response, initial_message = get_llm_reply(bot, say, channel_prompt,
-                                                  parsed_query['query'],
-                                                  to_all=parsed_query['to_all'])
+        await ack()
+        response, initial_message = await get_llm_reply(bot, say, channel_prompt,
+                                                    parsed_query['query'],
+                                                     to_all=parsed_query['to_all'])
         
         response = f"*<@{user}> asked*: {parsed_query['query']}\n*Answer*:\n{response}"
         if parsed_query['to_all']:
-            client.chat_update(
-                channel=channel_id,
-                ts=initial_message['ts'],
-                text=response
-            )
+            await client.chat_update(
+                    channel=channel_id,
+                    ts=initial_message['ts'],
+                    text=response
+                )
         else:
-            respond(response)
+            await respond(response)
         # back to default temperature
-        bot.change_temperature(temperature=actual_temp)
+        await bot.change_temperature(temperature=actual_temp)
 
 
     @bot.command("/modify_bot")
-    def modify_bot(ack, body, client, logger, respond):
-        ack()
+    async def modify_bot(ack, body, client, logger, respond):
+        await ack()
         channel_id = body['channel_id']
         trigger_id = body['trigger_id']
         if channel_id[0] not in ['C', 'G']:
@@ -130,7 +130,7 @@ def create_handlers(bot):
         with open(f'{current_directory}/payloads/modify_bot_template.json', 'r') as f:
             template = f.read()
         
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        channel_bot_info = await bot.get_channel_llm_info(channel_id)
             
         
         template = template.format(personality=channel_bot_info['personality'],
@@ -140,10 +140,10 @@ def create_handlers(bot):
 
         # include channel_id
         view["private_metadata"] =  json.dumps({"channel_id": channel_id})
-        client.views_open(trigger_id=trigger_id, view=view)
+        await client.views_open(trigger_id=trigger_id, view=view)
         
     @bot.view('modify_bot')
-    def handle_modify_bot(ack, body, logger, say, view):
+    async def handle_modify_bot(ack, body, logger, say, view):
         values = view['state']['values']
         bot_values = {'personality': '',
                       'instructions': '',
@@ -162,24 +162,24 @@ def create_handlers(bot):
                         "errors": {key: "The input field must be a number between 0 and 1."}})
                     return        
             bot_values[key] = input_value
-        bot.define_channel_llm_info(channel_id, bot_values)
-        ack()
-        say(f'<@{user}> has modified the bot info', channel=channel_id)
+        await bot.define_channel_llm_info(channel_id, bot_values)
+        await ack()
+        await say(f'<@{user}> has modified the bot info', channel=channel_id)
 
     @bot.command("/bot_info")
-    def get_bot_info(ack, respond, command):
-        ack()
+    async def get_bot_info(ack, respond, command):
+        await ack()
         channel_id = command['channel_id']
         if channel_id[0] not in ['C', 'G']:
             respond(text='This command can only be used in channels.')
             return
-        bot_info = bot.get_channel_llm_info(channel_id)
+        bot_info = await bot.get_channel_llm_info(channel_id)
         prompt = prompts.INITIAL_BOT_PROMPT
         res = "*Default Prompt:*\n`"
         res += prompt.format(personality=bot_info["personality"],
                               instructions=bot_info["instructions"])
         res += f"`\n*Temperature:* {bot_info['temperature']}"
-        respond(res)
+        await respond(res)
 
     # @bot.event("file_shared")
     # def file_func(payload, client, ack):
@@ -266,20 +266,20 @@ def create_handlers(bot):
     #     )
 
     @bot.event("app_mention")
-    def handle_mention(body, say, logger, client, respond):
+    async def handle_mention(body, say, logger, client, respond):
         channel_id = body['event']['channel']
-        bot_user_id = client.auth_test()['user_id']
+        bot_user_id = bot._bot_user_id
         user_query = body['event']['text'].replace(f'<@{bot_user_id}>', '')
-        channel_llm_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = await bot.get_channel_llm_info(channel_id)
         actual_temp = channel_llm_info['temperature']
-        bot.change_temperature(actual_temp)
+        await bot.change_temperature(actual_temp)
         try:
             thread_ts = body['event']['thread_ts']
         except:
             thread_ts = None
         if thread_ts:
             try:
-                messages_history, users = bot.extract_thread_conversation(channel_id, thread_ts)
+                messages_history, users = await bot.extract_thread_conversation(channel_id, thread_ts)
 
                 prompt = PromptTemplate(template=prompts.THREAD_PROMPT,
                                         input_variables=['personality',
@@ -296,21 +296,21 @@ def create_handlers(bot):
 
                 # check if user ask for change the temperature
                 if parsed_query['change_temp']:
-                        bot.change_temperature(temperature=parsed_query['new_temp'])
+                        await bot.change_temperature(temperature=parsed_query['new_temp'])
                         #respond(f'Changing temperature to {bot.get_temperature()}')
                 if parsed_query['new_temp'] == -1:
                         respond(f"`!temp` only accepts values between 0 and 1. Using current value of `{actual_temp}`")
-                response, initial_message = get_llm_reply(bot, say, final_prompt,
-                                                          parsed_query['query'],
-                                                          to_all=True,
-                                                          thread_ts=thread_ts)
-                client.chat_update(
-                    channel=channel_id,
-                    ts=initial_message['ts'],
-                    text=response
-                )
+                response, initial_message = await get_llm_reply(bot, say, final_prompt,
+                                                                parsed_query['query'],
+                                                                to_all=True,
+                                                                thread_ts=thread_ts)
+                await client.chat_update(
+                        channel=channel_id,
+                        ts=initial_message['ts'],
+                        text=response
+                    )
                 # back to default temperature
-                bot.change_temperature(temperature=actual_temp)
+                await bot.change_temperature(temperature=actual_temp)
 
             except Exception as e:
                 logger.error(f"Error {e}")
