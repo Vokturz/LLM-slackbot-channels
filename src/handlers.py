@@ -1,17 +1,11 @@
 from . import prompts
-from langchain.llms import (OpenAI, CTransformers, FakeListLLM)
-from langchain.chat_models import ChatOpenAI
-import time
-from pathlib import Path
-import requests
-import tiktoken
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.embeddings import (HuggingFaceEmbeddings, FakeEmbeddings)
-from langchain.vectorstores import Chroma
-from langchain.prompts import PromptTemplate
 import json
 import os
 import re
+import time
+from langchain.vectorstores import Chroma
+from langchain.prompts import PromptTemplate
+
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
 files_path = "files"
