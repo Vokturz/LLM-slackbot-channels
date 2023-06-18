@@ -77,12 +77,18 @@ class SlackBot:
     def _bot_user_id(self):
         return self.bot_user_id
     
+    @property
+    def _model_type(self):
+        return self.model_type
+    
     def initilize_llm(self, model_type, handler=None,
                        config=dict(temperature=0.8,
                                     max_tokens=300)):
         model_type = model_type.lower()
+        self.model_type = model_type
         if model_type == 'fakellm':
-            self.llm = FakeListLLM(responses = lambda x : x)
+            responses = [f'foo{i}' for i in range(1000)]
+            self.llm = FakeListLLM(responses = responses)
 
         elif model_type != 'openai':
             try:
@@ -100,42 +106,53 @@ class SlackBot:
         model_type = model_type.lower()
         if model_type == 'fakellm':
             self.embeddings = FakeEmbeddings(size=768)
-            self.embeddings_clf = FakeEmbeddings(size=768)
+            #self.embeddings_clf = FakeEmbeddings(size=768)
         else:
             try:
                 emb_model = os.environ['EMB_MODEL']
-                emb_clf_model = os.environ['EMB_CLF_MODEL']
+                #emb_clf_model = os.environ['EMB_CLF_MODEL']
             except KeyError as e:
                 raise ValueError("Could not find required environment variable") from e
             
             self.embeddings = HuggingFaceEmbeddings(model_name=emb_model)
-            self.embeddings_clf = HuggingFaceEmbeddings(model_name=emb_clf_model)
+            #self.embeddings_clf = HuggingFaceEmbeddings(model_name=emb_clf_model)
 
     def get_llm(self):
         return self.llm
 
+    async def generate_response(self, query):
+        llm = self.llm
+        resp = await llm.agenerate([query])
+        return resp.generations[0][0].text
+
     def get_embeddings(self):
-        return (self.embeddings, self.embeddings_clf)
+        return self.embeddings
+        #return (self.embeddings, self.embeddings_clf)
     
     def get_temperature(self):
         if 'model_type' in self.llm.__dict__: # CTransformers
             return self.llm.client.config.temperature
-        else: # OpenAI
-            return self.llm.temperature
+        else: 
+            try: # OpenAI
+                return self.llm.temperature
+            except: # FakeLLM
+                return 0
         
-    async def change_temperature(self, temperature):
+    def change_temperature(self, temperature):
         if 'model_type' in self.llm.__dict__: # CTransformers
             self.llm.client.config.temperature = temperature
-        else: # OpenAI
-            self.llm.temperature = temperature 
-        
+        else:
+            try: # OpenAI
+                self.llm.temperature = temperature 
+            except: # FakeLLM
+                pass
 
-    async def define_channel_llm_info(self, channel_id, channel_bot_info):
+    def define_channel_llm_info(self, channel_id, channel_bot_info):
         self.channels_llm_info[channel_id] = channel_bot_info
         with open(llm_info_file, 'w') as f:
                 json.dump(self.channels_llm_info, f)
 
-    async def get_channel_llm_info(self, channel_id):
+    def get_channel_llm_info(self, channel_id):
         if channel_id not in self.channels_llm_info.keys():
             self.define_channel_llm_info(channel_id, self.default_llm_info) 
         return self.channels_llm_info[channel_id]
@@ -151,21 +168,21 @@ class SlackBot:
         messages_history = []
         for msg in messages:
             user = msg['user']
-            text = msg['text'].replace(f'<@{bot_user_id}>', 'AI')
+            text = msg['text'].replace(f'<@{bot_user_id}>', '').strip()
             if self.verbose:
                 text = re.sub(r'\(_time: .*?\)', '', text)
-            if actual_user != user:
-                if user == bot_user_id:
+            if user == bot_user_id:
                     messages_history.append(f'AI: {text}')
-                else:
+                    actual_user = user
+            else:
+                text = re.sub(r'!temp=([\d.]+)', '', text)
+                if actual_user != user:
                     users.add(f'<@{user}>') # if was not added
                     messages_history.append(f'<@{user}>: {text}')
-                actual_user = user
-            else: # Is the same user talking
-                messages_history[-1] += f'\n{text}'
+                    actual_user = user
+                else: # The same user is talking
+                    messages_history[-1] += f'\n{text}'
         return messages_history, users
-    
-
 
 
     # extend Slack Bolt decorators
