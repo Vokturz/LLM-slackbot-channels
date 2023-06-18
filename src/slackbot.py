@@ -27,29 +27,66 @@ class SlackBot:
             ValueError: If the SLACK_BOT_TOKEN or SLACK_APP_TOKEN 
                         environment variables could not be found.
         """
-        self.name = name
-        self.verbose = verbose
+        self._name = name
+        self._verbose = verbose
+        self._default_temp = default_temp
         try:
-            self.bot_token = os.environ['SLACK_BOT_TOKEN']
-            self.app_token = os.environ['SLACK_APP_TOKEN']
+            self._bot_token = os.environ['SLACK_BOT_TOKEN']
+            self._app_token = os.environ['SLACK_APP_TOKEN']
         except KeyError as e:
             raise ValueError("Could not find required environment variable") from e
 
-        self.app =  AsyncApp(token=self.bot_token, name=self.name)
+        self._app =  AsyncApp(token=self._bot_token, name=self._name)
 
         # This could be a class
         default_llm_info = dict(personality=default_personality,
                                 instructions=default_instructions,
                                 temperature=default_temp)
-        self.default_llm_info = default_llm_info
+        self._default_llm_info = default_llm_info
         
         # This could be loaded using pydantic
         if os.path.exists(llm_info_file):
             with open(llm_info_file, 'r') as f:
                 channels_llm_info = json.load(f)
-                self.channels_llm_info = channels_llm_info
+                self._channels_llm_info = channels_llm_info
         else:
-            self.channels_llm_info = {}
+            self._channels_llm_info = {}
+
+    def initilize_llm(self, model_type, handler=None,
+                       config=dict(temperature=0.8,
+                                    max_tokens=300)):
+        model_type = model_type.lower()
+        self._model_type = model_type
+        if model_type == 'fakellm':
+            responses = [f'foo{i}' for i in range(1000)]
+            self._llm = FakeListLLM(responses = responses)
+
+        elif model_type != 'openai':
+            try:
+                model_path = os.environ['CTRANSFORMERS_MODEL']
+            except KeyError as e:
+                raise ValueError("Could not find required environment variable") from e
+
+            self._llm = CTransformers(model=model_path, model_type=model_type,
+                             callbacks=[handler], config=config)
+            
+        else:
+            self._llm = OpenAI(callbacks=[handler], **config)
+
+    def initialize_embeddings(self,model_type):
+        model_type = model_type.lower()
+        if model_type == 'fakellm':
+            self._embeddings = FakeEmbeddings(size=768)
+            #self.embeddings_clf = FakeEmbeddings(size=768)
+        else:
+            try:
+                emb_model = os.environ['EMB_MODEL']
+                #emb_clf_model = os.environ['EMB_CLF_MODEL']
+            except KeyError as e:
+                raise ValueError("Could not find required environment variable") from e
+            
+            self._embeddings = HuggingFaceEmbeddings(model_name=emb_model)
+            #self.embeddings_clf = HuggingFaceEmbeddings(model_name=emb_clf_model)
 
     async def start(self) -> None:
         """
@@ -59,108 +96,72 @@ class SlackBot:
             RuntimeError: If the AsyncSocketModeHandler could not start.
         """
         response = await self.app.client.auth_test()
-        self.bot_user_id = response["user_id"]
-        await AsyncSocketModeHandler(self.app, self.app_token).start_async()
-
-    def get_app(self):
-        return self.app
-    
-    def get_bot_token(self) -> str:
-        return self.bot_token
-    
-    def get_verbose(self):
-        return self.verbose
-    
-    def get_bot_user_id(self):
-        return self.bot_user_id
-    @property
-    def _bot_user_id(self):
-        return self.bot_user_id
-    
-    @property
-    def _model_type(self):
-        return self.model_type
-    
-    def initilize_llm(self, model_type, handler=None,
-                       config=dict(temperature=0.8,
-                                    max_tokens=300)):
-        model_type = model_type.lower()
-        self.model_type = model_type
-        if model_type == 'fakellm':
-            responses = [f'foo{i}' for i in range(1000)]
-            self.llm = FakeListLLM(responses = responses)
-
-        elif model_type != 'openai':
-            try:
-                model_path = os.environ['CTRANSFORMERS_MODEL']
-            except KeyError as e:
-                raise ValueError("Could not find required environment variable") from e
-
-            self.llm = CTransformers(model=model_path, model_type=model_type,
-                             callbacks=[handler], config=config)
-            
-        else:
-            self.llm = OpenAI(callbacks=[handler], **config)
-
-    def initialize_embeddings(self,model_type):
-        model_type = model_type.lower()
-        if model_type == 'fakellm':
-            self.embeddings = FakeEmbeddings(size=768)
-            #self.embeddings_clf = FakeEmbeddings(size=768)
-        else:
-            try:
-                emb_model = os.environ['EMB_MODEL']
-                #emb_clf_model = os.environ['EMB_CLF_MODEL']
-            except KeyError as e:
-                raise ValueError("Could not find required environment variable") from e
-            
-            self.embeddings = HuggingFaceEmbeddings(model_name=emb_model)
-            #self.embeddings_clf = HuggingFaceEmbeddings(model_name=emb_clf_model)
-
-    def get_llm(self):
-        return self.llm
+        self._bot_user_id = response["user_id"]
+        await AsyncSocketModeHandler(self._app, self._app_token).start_async()
 
     async def generate_response(self, query):
-        llm = self.llm
+        llm = self._llm
         resp = await llm.agenerate([query])
         return resp.generations[0][0].text
+    
+    @property
+    def app(self):
+        return self._app
+    
+    @property
+    def verbose(self):
+        return self._verbose
+    
+    @property
+    def bot_user_id(self):
+        return self._bot_user_id
+    
+    @property
+    def model_type(self):
+        return self._model_type
+    
 
-    def get_embeddings(self):
-        return self.embeddings
+    @property
+    def llm(self):
+        return self._llm
+
+    @property
+    def embeddings(self):
+        return self._embeddings
         #return (self.embeddings, self.embeddings_clf)
     
     def get_temperature(self):
-        if 'model_type' in self.llm.__dict__: # CTransformers
-            return self.llm.client.config.temperature
+        if 'model_type' in self._llm.__dict__: # CTransformers
+            return self._llm.client.config.temperature
         else: 
             try: # OpenAI
-                return self.llm.temperature
+                return self._llm.temperature
             except: # FakeLLM
-                return 0
+                return self._default_temp
         
     def change_temperature(self, temperature):
-        if 'model_type' in self.llm.__dict__: # CTransformers
-            self.llm.client.config.temperature = temperature
+        if 'model_type' in self._llm.__dict__: # CTransformers
+            self._llm.client.config.temperature = temperature
         else:
             try: # OpenAI
-                self.llm.temperature = temperature 
+                self._llm.temperature = temperature 
             except: # FakeLLM
                 pass
 
     def define_channel_llm_info(self, channel_id, channel_bot_info):
-        self.channels_llm_info[channel_id] = channel_bot_info
+        self._channels_llm_info[channel_id] = channel_bot_info
         with open(llm_info_file, 'w') as f:
-                json.dump(self.channels_llm_info, f)
+                json.dump(self._channels_llm_info, f)
 
     def get_channel_llm_info(self, channel_id):
-        if channel_id not in self.channels_llm_info.keys():
-            self.define_channel_llm_info(channel_id, self.default_llm_info) 
-        return self.channels_llm_info[channel_id]
+        if channel_id not in self._channels_llm_info.keys():
+            self.define_channel_llm_info(channel_id, self._default_llm_info) 
+        return self._channels_llm_info[channel_id]
 
             
     async def extract_thread_conversation(self, channel_id, thread_ts):
-        client = self.app.client
-        bot_user_id = self.bot_user_id
+        client = self._app.client
+        bot_user_id = self._bot_user_id
         result = await client.conversations_replies(channel=channel_id, ts=thread_ts)
         messages = result['messages']
         actual_user = ''
@@ -169,7 +170,7 @@ class SlackBot:
         for msg in messages:
             user = msg['user']
             text = msg['text'].replace(f'<@{bot_user_id}>', '').strip()
-            if self.verbose:
+            if self._verbose:
                 text = re.sub(r'\(_time: .*?\)', '', text)
             if user == bot_user_id:
                     messages_history.append(f'AI: {text}')
@@ -188,42 +189,42 @@ class SlackBot:
     # extend Slack Bolt decorators
     def event(self, event_name):
         def decorator(handler):
-            self.app.event(event_name)(handler)
+            self._app.event(event_name)(handler)
             return handler
         return decorator
 
     def command(self, command_name):
         def decorator(handler):
-            self.app.command(command_name)(handler)
+            self._app.command(command_name)(handler)
             return handler
         return decorator
 
     def shortcut(self, shortcut_name):
         def decorator(handler):
-            self.app.shortcut(shortcut_name)(handler)
+            self._app.shortcut(shortcut_name)(handler)
             return handler
         return decorator
 
     def action(self, action_name):
         def decorator(handler):
-            self.app.action(action_name)(handler)
+            self._app.action(action_name)(handler)
             return handler
         return decorator
 
     def view(self, callback_id):
         def decorator(handler):
-            self.app.view(callback_id)(handler)
+            self._app.view(callback_id)(handler)
             return handler
         return decorator
 
     def options(self, callback_id):
         def decorator(handler):
-            self.app.options(callback_id)(handler)
+            self._app.options(callback_id)(handler)
             return handler
         return decorator
 
     def step(self, callback_id):
         def decorator(handler):
-            self.app.step(callback_id)(handler)
+            self._app.step(callback_id)(handler)
             return handler
         return decorator
