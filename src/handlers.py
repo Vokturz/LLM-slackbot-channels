@@ -60,7 +60,6 @@ def get_ask_classifier(embeddings_clf, phrase):
 async def get_llm_reply(bot, say, respond, prompt, parsed_body):
     #embd_clf = bot.get_embeddings()[1]
     #classif = get_ask_classifier(embd_clf, query)
-    llm = bot.get_llm()
     channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
     actual_temp = channel_llm_info['temperature']
     temp = actual_temp
@@ -72,7 +71,7 @@ async def get_llm_reply(bot, say, respond, prompt, parsed_body):
         final_prompt = prompt
         thread_ts = parsed_body['thread_ts']
         
-    n_tokens =  llm.get_num_tokens(final_prompt)
+    n_tokens =  bot.llm.get_num_tokens(final_prompt)
     
     if parsed_body['to_all']:
         init_msg = "Bot is thinking.. :hourglass_flowing_sand:"
@@ -106,7 +105,7 @@ async def get_llm_reply(bot, say, respond, prompt, parsed_body):
         final_time = round((time.time() - start_time)/60,2)
         bot.change_temperature(temperature=actual_temp)
 
-    if bot.get_verbose():
+    if bot.verbose:
         response += f"\n (_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
         #response += f" Your question was classified as *{classif}*_)"
 
@@ -191,7 +190,7 @@ def create_handlers(bot):
             bot_values[key] = input_value
         bot.define_channel_llm_info(channel_id, bot_values)
         await ack()
-        await say(f'<@{user}> has modified the bot info', channel=channel_id)
+        await say(f'_*<@{user}> has modified the bot info*_', channel=channel_id)
 
     @bot.command("/bot_info")
     async def get_bot_info(ack, respond, command):
@@ -331,9 +330,9 @@ def create_handlers(bot):
             except Exception as e:
                 logger.error(f"Error {e}")
         else:
-            say("If you want to ask something, use command */ask*."
-                " If you want to include me on a discussion"
-                ", you have to mention me in a _thread_.")
+            await say("If you want to ask something, use command */ask*."
+                    " If you want to include me on a discussion"
+                    ", you have to mention me in a _thread_.")
         #if len(text.split(' ')) > 1:
         #    say(f"Hey, <@{user}>!, my name is <@{bot_user_id}>", thread_ts=thread_ts)
 
