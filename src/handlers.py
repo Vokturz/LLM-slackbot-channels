@@ -179,14 +179,6 @@ def create_handlers(bot: SlackBot) -> None:
         to use the proper command or use a thread for discussion.
         """
 
-
-
-        channel_id = parsed_body["channel_id"]
-        # Ensure is only used in channels
-        if channel_id[0] not in ['C', 'G']:
-            await say(text='Interaction only able in channels.')
-            return
-        
         # Check if the mention comes from an edited message
         if "edited" in body["event"].keys():
             return
@@ -199,7 +191,11 @@ def create_handlers(bot: SlackBot) -> None:
         parsed_body['to_all'] = True
 
         # Get the bot info asociated with the channel
-        
+        channel_id = parsed_body["channel_id"]
+        # Ensure is only used in channels
+        if channel_id[0] not in ['C', 'G']:
+            await say(text='Interaction only able in channels.')
+            return
         channel_llm_info = bot.get_channel_llm_info(channel_id)
 
         try:
