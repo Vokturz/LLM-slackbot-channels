@@ -30,6 +30,12 @@ def create_handlers(bot: SlackBot) -> None:
         channel_id = parsed_body["channel_id"]
         user_id = parsed_body["user_id"]
 
+        await ack()
+        # Ensure command is only used in channels
+        if channel_id[0] not in ['C', 'G']:
+            await respond(text='This command can only be used in channels.')
+            return
+        
         # Get the LLM information of the channel
         channel_llm_info = bot.get_channel_llm_info(channel_id)
 
@@ -41,7 +47,7 @@ def create_handlers(bot: SlackBot) -> None:
         channel_prompt = prompt.partial(personality=channel_llm_info['personality'],
                                         instructions=channel_llm_info['instructions'])
         
-        await ack()
+        
 
         # Get the response from the LLM
         response, initial_message = await get_llm_reply(bot, say, respond,
@@ -57,7 +63,6 @@ def create_handlers(bot: SlackBot) -> None:
                                      text=response)
         else:
             await respond(response)
-
 
     @bot.command("/modify_bot")
     async def handle_modify_bot(ack: Ack, body: Dict[str, Any],
@@ -147,7 +152,7 @@ def create_handlers(bot: SlackBot) -> None:
 
         # Ensure command is only used in channels
         if channel_id[0] not in ['C', 'G']:
-            respond(text='This command can only be used in channels.')
+            await respond(text='This command can only be used in channels.')
             return
         
         # Retrieve the bot's info for the channel
@@ -174,6 +179,14 @@ def create_handlers(bot: SlackBot) -> None:
         to use the proper command or use a thread for discussion.
         """
 
+
+
+        channel_id = parsed_body["channel_id"]
+        # Ensure is only used in channels
+        if channel_id[0] not in ['C', 'G']:
+            await say(text='Interaction only able in channels.')
+            return
+        
         # Check if the mention comes from an edited message
         if "edited" in body["event"].keys():
             return
@@ -186,7 +199,7 @@ def create_handlers(bot: SlackBot) -> None:
         parsed_body['to_all'] = True
 
         # Get the bot info asociated with the channel
-        channel_id = parsed_body["channel_id"]
+        
         channel_llm_info = bot.get_channel_llm_info(channel_id)
 
         try:
