@@ -236,7 +236,6 @@ def create_handlers(bot: SlackBot) -> None:
                                              users=' '.join(list(users)),
                                              conversation='\n'.join(messages_history)
                                                              .replace('\n\n', '\n'))
-                print(final_prompt)
                 # Get reply and update initial message
                 response, initial_message = await get_llm_reply(bot, say, None,
                                                                 final_prompt,
