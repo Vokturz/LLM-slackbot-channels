@@ -83,17 +83,15 @@ def create_handlers(bot: SlackBot) -> None:
         
         # Load modify_bot_template.json payload
         with open(f'{current_directory}/payloads/modify_bot_template.json', 'r') as f:
-            template = f.read()
+            view = json.load(f)
         
         # Get channel bot info
         channel_bot_info = bot.get_channel_llm_info(channel_id)
             
-        # Replace template variables with channel bot info
-        template = template.format(personality=channel_bot_info['personality'],
-                                instructions=channel_bot_info['instructions'],
-                                temperature=channel_bot_info['temperature'])
-        # Convert template to JSON view
-        view = json.loads(template)
+        # Replace with channel bot info
+        view["blocks"][0]["element"]["initial_value"] = channel_bot_info['personality']
+        view["blocks"][1]["element"]["initial_value"] = channel_bot_info['instructions']
+        view["blocks"][2]["element"]["initial_value"] = str(channel_bot_info['temperature'])
 
         # Include channel_id in private_metadata
         view["private_metadata"] =  json.dumps({"channel_id": channel_id})

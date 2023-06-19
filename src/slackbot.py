@@ -196,7 +196,7 @@ class SlackBot:
         """
         self._channels_llm_info[channel_id] = channel_bot_info
         with open(llm_info_file, 'w') as f:
-                json.dump(self._channels_llm_info, f)
+                json.dump(self._channels_llm_info, f, ensure_ascii=False, indent=4)
 
     def get_channel_llm_info(self, channel_id: str) -> Dict[str, Union[str, float]]:
         """
