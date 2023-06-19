@@ -1,2 +1,2 @@
-# slackbot-LLM-QA
+# LLM-slackbot-channels
 Base for a slackbot using LLMs
