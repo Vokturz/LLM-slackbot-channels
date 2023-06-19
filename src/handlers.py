@@ -73,7 +73,7 @@ def create_handlers(bot: SlackBot) -> None:
 
         # Ensure command is only used in channels
         if channel_id[0] not in ['C', 'G']:
-            respond(text='This command can only be used in channels.')
+            await respond(text='This command can only be used in channels.')
             return
         
         # Load modify_bot_template.json payload
