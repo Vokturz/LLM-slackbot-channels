@@ -16,7 +16,7 @@ from slack_bolt import (Say, Respond, Ack)
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
 def create_handlers(bot: SlackBot) -> None:
-    @bot.command("/ask")
+    @bot.app.command("/ask")
     async def handle_ask(ack: Ack, respond: Respond, say: Say,
                         command: Dict[str, Any]) -> None:
         """
@@ -64,7 +64,7 @@ def create_handlers(bot: SlackBot) -> None:
         else:
             await respond(response)
 
-    @bot.command("/modify_bot")
+    @bot.app.command("/modify_bot")
     async def handle_modify_bot(ack: Ack, body: Dict[str, Any],
                                 respond : Respond) -> None:
         await ack()
@@ -100,7 +100,7 @@ def create_handlers(bot: SlackBot) -> None:
         client = bot.app.client
         await client.views_open(trigger_id=trigger_id, view=view)
         
-    @bot.view('modify_bot')
+    @bot.app.view('modify_bot')
     async def handle_modify_bot_view(ack: Ack, body: Dict[str, Any],
                                      say: Say, view: Dict[str, Any]) -> None:
         """
@@ -138,7 +138,7 @@ def create_handlers(bot: SlackBot) -> None:
         # Notify channel of bot modification
         await say(f'_*<@{user}> has modified the bot info*_', channel=channel_id)
 
-    @bot.command("/bot_info")
+    @bot.app.command("/bot_info")
     async def handle_bot_info(ack: Ack, respond: Respond,
                               command: Dict[str, Any]) -> None:
         """
@@ -166,7 +166,7 @@ def create_handlers(bot: SlackBot) -> None:
         # Send the response to the user
         await respond(response)
 
-    @bot.event("app_mention")
+    @bot.app.event("app_mention")
     async def handle_mention(say: Say, 
                              body: Dict[str, Any]) -> None:
         """

@@ -17,7 +17,7 @@ if model_type == 'llama':
     config = dict(gpu_layers=32, temperature=0.8, batch_size=1024,
                 context_length=2048, threads=6, stream=True, max_new_tokens=500)
 else:
-    config = dict(model_name="text-davinci-003", temperature=0.8, max_tokens=500)
+    config = dict(model_name="gpt-3.5-turbo", temperature=0.8, max_tokens=500)
 
 # Initialize LLM and embeddings
 bot.initialize_llm(model_type, max_tokens_threads=500, handler=handler, config=config)
@@ -27,7 +27,7 @@ bot.initialize_llm(model_type, max_tokens_threads=500, handler=handler, config=c
 create_handlers(bot)
 
 ### You can create new handlers for other commands as follow
-# @bot.command("/foo")
+# @bot.app.command("/foo")
 # async def handle_foo(say, respond, ack, command):
 #     await ack()
 #     # do something..
