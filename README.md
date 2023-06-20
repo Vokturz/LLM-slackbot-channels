@@ -74,3 +74,4 @@ The bot requires the following permissions:
 - [ ] Create tests
 - [ ] A `!ingest` command to create a vector database and use a QA retriever
 - [ ] Solve ChatOpenAI problem: message history for multiples users
+- [ ] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
