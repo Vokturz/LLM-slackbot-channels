@@ -68,3 +68,9 @@ The bot requires the following permissions:
    - `channels:join`
    - `channels:read`
    - `chat:write`
+
+## ToDo / Ideas
+- [ ] Deployment in [Modal.com](https://modal.com/)
+- [ ] Create tests
+- [ ] A `!ingest` command to create a vector database and use a QA retriever
+- [ ] Solve ChatOpenAI problem: message history for multiples users
