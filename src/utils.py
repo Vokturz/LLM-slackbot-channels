@@ -1,4 +1,3 @@
-from . import prompts
 import os
 import re
 import time
