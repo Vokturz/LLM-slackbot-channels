@@ -18,11 +18,12 @@ THREAD_PROMPT = (
 
 THREAD_QA_PROMPT = (
     f"{INITIAL_BOT_PROMPT}"
-    " If required, use the following pieces of context to respond."
-    " If you don't know the answer, just say that you don't know, don't try to make up an answer."
+    " Use the following pieces of context to respond."
     "\n\n{context}\n\n"
-    " Now, continue this conversation between users {users} and you with the name \"AI\"."
+    "This is the current conversation history between users {users} and you with the name \"AI\"."
     "\n\n\"{conversation}\""
-    "\n<@{user}>: {question}"
-    "\nAI: "
+    " If you don't know the answer, just say that you don't know, don't try to make up an answer."
+    "\nNow give a helpful answer to the followed user question."
+    "\n<@{user}> question: {question}"
+    "\nHelpful Answer:"
 )
