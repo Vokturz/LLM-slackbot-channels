@@ -37,23 +37,15 @@ def create_handlers(bot: SlackBot) -> None:
             await respond(text='This command can only be used in channels.')
             return
         
-        # Get the LLM information of the channel
-        channel_llm_info = bot.get_channel_llm_info(channel_id)
-
         # Generate prompt for the channel
         prompt = PromptTemplate(template=prompts.DEFAULT_PROMPT,
                                 input_variables=['personality',
                                                  'instructions',
                                                  'query'])
-        channel_prompt = prompt.partial(personality=channel_llm_info['personality'],
-                                        instructions=channel_llm_info['instructions'])
-        
-        
 
         # Get the response from the LLM
         response, initial_message = await get_llm_reply(bot, say, respond,
-                                                        channel_prompt,
-                                                        parsed_body)
+                                                        prompt, parsed_body)
         # Format the response
         response = f"*<@{user_id}> asked*: {parsed_body['query']}\n*Answer*:\n{response}"
 
@@ -288,8 +280,6 @@ def create_handlers(bot: SlackBot) -> None:
         if channel_id[0] not in ['C', 'G']:
             await say(text='Interaction only able in channels.')
             return
-        channel_llm_info = bot.get_channel_llm_info(channel_id)
-
         try:
             # Check if mention was made in a thread and get the thread ID
             thread_ts = body['event']['thread_ts']
@@ -298,24 +288,6 @@ def create_handlers(bot: SlackBot) -> None:
             thread_ts = None
         if thread_ts:
             try:
-                # Extract the conversation thread 
-                messages_history, users = await extract_thread_conversation(bot, channel_id, thread_ts)
-                warning = ""
-                # Remove first messages if the thread exceed the max tokens
-                # This follow the ConversationTokenBufferMemory approach from langchain
-                init_n_tokens = bot.llm.get_num_tokens('\n'.join(messages_history)
-                                                       .replace('\n\n', '\n'))
-                if init_n_tokens > bot.max_tokens_threads:
-                    n_removed = 0
-                    n_tokens = init_n_tokens
-                    while n_tokens > bot.max_tokens_threads:
-                        messages_history.pop(0)
-                        n_removed += 1
-                        n_tokens = bot.llm.get_num_tokens('\n'.join(messages_history)
-                                                          .replace('\n\n', '\n'))
-                    if bot.verbose:
-                        warning = (f"\n_Thread too long: `{init_n_tokens} > (max_tokens_threads={bot.max_tokens_threads})`,"
-                                   f" first {n_removed} messages were removed._")
                 # Generate the prompt
                 prompt = PromptTemplate(template=prompts.THREAD_PROMPT,
                                         input_variables=['personality',
@@ -323,23 +295,19 @@ def create_handlers(bot: SlackBot) -> None:
                                                          'users',
                                                          'conversation'])
                 
-                final_prompt = prompt.format(personality=channel_llm_info['personality'],
-                                             instructions=channel_llm_info['instructions'],
-                                             users=' '.join(list(users)),
-                                             conversation='\n'.join(messages_history)
-                                                             .replace('\n\n', '\n'))
                 # Get reply and update initial message
                 response, initial_message = await get_llm_reply(bot, say, None,
-                                                                final_prompt,
+                                                                prompt,
                                                                 parsed_body)
                 client = bot.app.client
                 await client.chat_update(
                         channel=channel_id,
                         ts=initial_message['ts'],
-                        text=response + warning
+                        text=response
                     )
             except Exception as e:
-                bot.app.logger.error(f"Error {e}")
+                raise e
+                #bot.app.logger.error(f"Error {e}")
         else:
             # Send message instructing users to use the proper command
             # or use a thread for discussion

@@ -5,6 +5,7 @@ import asyncio
 from typing import (Dict, Optional, Any, Union, Tuple, List, Set)
 from slack_bolt import (Say, Respond)
 from .slackbot import SlackBot
+from langchain import PromptTemplate, LLMChain
 
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -61,8 +62,9 @@ def parse_format_body(body: Dict[str, Any],
 async def get_llm_reply(bot: SlackBot, 
                         say: Say, 
                         respond: Respond, 
-                        prompt: str, 
-                        parsed_body: Dict[str, Union[str, float]]
+                        prompt: PromptTemplate, 
+                        parsed_body: Dict[str, Union[str, float]],
+                        messages_history: List[str]=[]
                         ) -> Tuple[str, Optional[Say]]:
     """
     Generate a response using the bot's language model, given a prompt and
@@ -72,13 +74,26 @@ async def get_llm_reply(bot: SlackBot,
     actual_temp = channel_llm_info['temperature']
     temp = actual_temp
 
+    to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions']}
+
      # format prompt and get thread timestamp
     if 'thread_ts' not in parsed_body.keys():
-        final_prompt = prompt.format(query=parsed_body['query'])
+        to_chain['query'] = parsed_body['query']
+        # No warning message from reducing thread messages
         thread_ts = None
+        warning_msg = ""
     else:
-        final_prompt = prompt
         thread_ts = parsed_body['thread_ts']
+        # Extract the conversation thread 
+        messages_history, users = await extract_thread_conversation(bot,
+                                                                    parsed_body['channel_id'],
+                                                                    thread_ts)
+        # ConversationTokenBufferMemory approach
+        messages_history, warning_msg = custom_token_memory(bot, messages_history)
+        to_chain['conversation'] = ('\n'.join(messages_history)
+                                     .replace('\n\n', '\n'))
+        to_chain['users'] = ' '.join(list(users))
+        
     
     # send initial message if applicable
     if parsed_body['to_all']:
@@ -102,21 +117,21 @@ async def get_llm_reply(bot: SlackBot,
             if parsed_body["from_command"]:
                 await respond(f"`!temp` only accepts values between 0 and 1."
                                 f" Using current value of `{actual_temp}`")
-            else:
-                await say(f"`!temp` only accepts values between 0 and 1."
-                            f" Using current value of `{actual_temp}`", thread_ts=thread_ts)
             temp = actual_temp
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
-        resp_llm = await bot.generate_response(final_prompt)
+
+        # generate response
+        chain = LLMChain(llm=bot.llm, prompt=prompt)
+        resp_llm = await chain.arun(to_chain)
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
         bot.change_temperature(temperature=actual_temp)
 
     if bot.verbose:
-        n_tokens =  bot.llm.get_num_tokens(final_prompt)
+        n_tokens =  bot.llm.get_num_tokens(prompt.format(**to_chain))
         response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
-
+        response += warning_msg
     return response, initial_message
 
 async def extract_thread_conversation(bot: SlackBot, channel_id:str,
@@ -151,3 +166,29 @@ async def extract_thread_conversation(bot: SlackBot, channel_id:str,
             else: # The same user is talking
                 messages_history[-1] += f'\n{text}'
     return messages_history, users
+
+
+def custom_token_memory(bot: SlackBot,
+                        messages_history: List[str]
+                        ) -> Tuple[List[str], str]:
+    """
+    Remove first messages if the thread exceed the max tokens
+    This follow the ConversationTokenBufferMemory approach from langchain
+    """
+    warning_msg = ""
+
+    init_n_tokens = bot.llm.get_num_tokens('\n'.join(messages_history)
+                                            .replace('\n\n', '\n'))
+    if init_n_tokens > bot.max_tokens_threads:
+        n_removed = 0
+        n_tokens = init_n_tokens
+        while n_tokens > bot.max_tokens_threads:
+            messages_history.pop(0)
+            n_removed += 1
+            n_tokens = bot.llm.get_num_tokens('\n'.join(messages_history)
+                                                .replace('\n\n', '\n'))
+        if bot.verbose:
+            warning_msg = (f"\n_Thread too long: `{init_n_tokens} >"
+                           f" (max_tokens_threads={bot.max_tokens_threads})`,"
+                           f" first {n_removed} messages were removed._")
+    return messages_history, warning_msg
