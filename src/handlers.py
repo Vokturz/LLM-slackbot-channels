@@ -1,7 +1,7 @@
 from . import prompts
 from .slackbot import SlackBot
 from .utils import (parse_format_body, get_llm_reply,
-                    extract_thread_conversation)
+                    extract_first_message_thread)
 import json
 import os
 import re
@@ -32,6 +32,10 @@ def create_handlers(bot: SlackBot) -> None:
         user_id = parsed_body["user_id"]
 
         await ack()
+
+        if bot.verbose:
+            bot.app.logger.info(f"/ask used by {user_id} in channel {channel_id}:"
+                                f"{command['text']}")
         # Ensure command is only used in channels
         if channel_id[0] not in ['C', 'G']:
             await respond(text='This command can only be used in channels.')
@@ -69,6 +73,9 @@ def create_handlers(bot: SlackBot) -> None:
         """
         channel_id = body['channel_id']
         trigger_id = body['trigger_id']
+
+        if bot.verbose:
+            bot.app.logger.info(f"/modify_bot used by {body['user_id']} in channel {channel_id}")
 
         # Ensure command is only used in channels
         if channel_id[0] not in ['C', 'G']:
@@ -140,6 +147,8 @@ def create_handlers(bot: SlackBot) -> None:
         """
         await ack()
         channel_id = command['channel_id']
+        if bot.verbose:
+            bot.app.logger.info(f"/bot_info used by {command['user_id']} in channel {channel_id}")
 
         # Ensure command is only used in channels
         if channel_id[0] not in ['C', 'G']:
@@ -163,6 +172,7 @@ def create_handlers(bot: SlackBot) -> None:
     async def handle_permissions(ack: Ack, body: Dict[str, Any],
                                 respond : Respond) -> None:
         await ack()
+
         """
         Handle the /permissions command. 
         By default all users have access to the bot
@@ -173,6 +183,8 @@ def create_handlers(bot: SlackBot) -> None:
         channel_id = body['channel_id']
         trigger_id = body['trigger_id']
 
+        if bot.verbose:
+            bot.app.logger.info(f"/permissions used by {body['user_id']} in channel {channel_id}")
         # Check if the password was defined
         try: 
             permissions_psswd = os.environ["PERMISSIONS_PASSWORD"]
@@ -274,6 +286,8 @@ def create_handlers(bot: SlackBot) -> None:
         parsed_body = parse_format_body(body["event"], bot_user_id=bot_user_id)
         parsed_body['to_all'] = True
 
+        bot.app.logger.info(f"User {parsed_body['user_id']} mentioned the bot"
+                            f" in channel {parsed_body['channel_id']}")
         # Get the bot info asociated with the channel
         channel_id = parsed_body["channel_id"]
         # Ensure is only used in channels
@@ -287,30 +301,80 @@ def create_handlers(bot: SlackBot) -> None:
         except:
             thread_ts = None
         if thread_ts:
-            try:
-                # Generate the prompt
+            first_message = await extract_first_message_thread(bot, channel_id,
+                                                                thread_ts)
+           # Generate the prompt
+            if 'files' not in first_message:
+                # Is not a QA thread
                 prompt = PromptTemplate(template=prompts.THREAD_PROMPT,
                                         input_variables=['personality',
                                                          'instructions',
                                                          'users',
                                                          'conversation'])
+                if bot.verbose:
+                    bot.app.logger.info(f"Asking thread"
+                                        f" {channel_id}/{first_message['ts']}:"
+                                        f" {parsed_body['query']}")
+            else:
+                # Is a QA thread
+                prompt = PromptTemplate(template=prompts.THREAD_QA_PROMPT,
+                                        input_variables=['personality',
+                                                         'instructions',
+                                                         'context',
+                                                         'users',
+                                                         'user', # who ask
+                                                         'question',
+                                                         'conversation'])
+                if bot.verbose:
+                    bot.app.logger.info(f"Asking RetrievalQA thread"
+                                        f" {channel_id}/{first_message['ts']}:"
+                                        f" {parsed_body['query']}")
+            # Get reply and update initial message
+
+            response, initial_message = await get_llm_reply(bot, say, None,
+                                                            prompt,
+                                                            parsed_body,
+                                                            first_ts=first_message['ts'])
+
                 
-                # Get reply and update initial message
-                response, initial_message = await get_llm_reply(bot, say, None,
-                                                                prompt,
-                                                                parsed_body)
-                client = bot.app.client
-                await client.chat_update(
-                        channel=channel_id,
-                        ts=initial_message['ts'],
-                        text=response
-                    )
-            except Exception as e:
-                raise e
-                #bot.app.logger.error(f"Error {e}")
+
+            client = bot.app.client
+            await client.chat_update(
+                    channel=channel_id,
+                    ts=initial_message['ts'],
+                    text=response
+                )
         else:
-            # Send message instructing users to use the proper command
-            # or use a thread for discussion
-            await say("If you want to ask something, use command */ask*."
-                      " If you want to include me on a discussion"
-                      ", you have to mention me in a _thread_.")
+            if "files" in body['event'].keys():
+                extra_separators = re.findall(r'!sep=(\S+)', parsed_body["query"])
+                files =  body['event']['files']
+                file_name_list = []
+                for _file in files:
+                    import requests
+                    from pathlib import Path
+                    from .ingest import (load_single_document, process_documents,
+                                         LOADER_MAPPING)
+                    url = _file['url_private_download']
+                    file_name = _file['name'] 
+                    pretty_type = _file['pretty_type']
+                    doc_list = []
+                    if '.'+file_name.split('.')[-1] in LOADER_MAPPING.keys():
+                        resp = requests.get(url, headers={'Authorization':
+                                                          'Bearer %s' % bot.bot_token})
+                        save_file = Path(f'data/tmp/{file_name}')
+                        save_file.write_bytes(resp.content)
+                        file_name_list.append(file_name)
+                        doc_list.append(load_single_document(f'data/tmp/{file_name}', pretty_type))
+                        save_file.unlink()
+                    texts = process_documents(doc_list, chunk_size=500, chunk_overlap=50,
+                                               extra_separators=extra_separators)   
+                    bot.define_thread_retriever_db(channel_id, body['event']['ts'], texts)
+                await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
+                          thread_ts=body['event']['ts'])
+            else:
+                # Send message instructing users to use the proper command
+                # or use a thread for discussion
+                await say("If you want to ask something, use command */ask*."
+                        " If you want to include me on a discussion"
+                        ", you have to mention me in a _thread_.")
+

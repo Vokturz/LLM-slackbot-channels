@@ -159,4 +159,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+
 data/channels_llm_info.json
+data/permissions.json
+data/db/*
+data/tmp/*
+!data/.gitkeep
+!data/db/.gitkeep
+!data/tmp/.gitkeep
