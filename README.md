@@ -76,6 +76,7 @@ The bot requires the following permissions:
    - `channels:read`
    - `chat:write`
    - `im:write`  _<- To notify users about change in permissions_
+   - `users:read`  _<- To get list of users_
 ## ToDo / Ideas
 - [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
 - [ ] Deployment in [Modal.com](https://modal.com/)
