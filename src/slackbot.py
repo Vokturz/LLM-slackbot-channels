@@ -1,7 +1,6 @@
 import logging
 import os
 import json
-import re
 from typing import (Callable, Dict, Optional, Union, Tuple, List, Any, Set)
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
@@ -10,10 +9,18 @@ from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import (HuggingFaceEmbeddings, FakeEmbeddings)
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import LLM
+from langchain.docstore.document import Document
+from langchain.vectorstores.base import VectorStore
+from langchain.vectorstores import Chroma
+import glob
+from chromadb.config import Settings
+
+VStore = Chroma
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 llm_info_file = f'{current_directory}/../data/channels_llm_info.json'
 permissions_file = f'{current_directory}/../data/permissions.json'
+db_dir = f'{current_directory}/../data/db'
 
 class SlackBot:
     def __init__(self, name: str='SlackBot',
@@ -59,12 +66,23 @@ class SlackBot:
         self._default_llm_info = default_llm_info
         
         # This could be loaded using pydantic
+        logger.info("Loading Channels information..")
         if os.path.exists(llm_info_file):
             with open(llm_info_file, 'r') as f:
                 channels_llm_info = json.load(f)
                 self._channels_llm_info = channels_llm_info
         else:
             self._channels_llm_info = {}
+
+        logger.info("Loading Thread Retrievers locations..")
+        thread_retriever_db = {}
+        for channel_dir in glob.glob(db_dir + "/[CG]*"):
+            channel_id = channel_dir.split("/")[-1]
+            thread_retriever_db[channel_id] = {}
+            for ts_dir in glob.glob(channel_dir + "/*"):
+                ts_val = ts_dir.split("/")[-1]
+                thread_retriever_db[channel_id][ts_val] = ts_dir
+        self._thread_retriever_db = thread_retriever_db
 
         try:
             psswd = os.environ["PERMISSIONS_PASSWORD"]
@@ -77,6 +95,7 @@ class SlackBot:
             logger.warning(f"No password provided! Command /permissions will not work")
 
         # This could be loaded using pydantic
+        logger.info("Loading Permissions information..")
         if os.path.exists(permissions_file):
             with open(permissions_file, 'r') as f:
                 allowed_users = json.load(f)
@@ -157,6 +176,10 @@ class SlackBot:
         return self._app
     
     @property
+    def bot_token(self) -> str:
+        return self._bot_token
+    
+    @property
     def verbose(self) -> bool:
         return self._verbose
     
@@ -175,7 +198,7 @@ class SlackBot:
     @property
     def llm(self) -> LLM:
         return self._llm
-
+        
     @property
     def allowed_users(self) -> Dict:
         return self._allowed_users
@@ -212,7 +235,45 @@ class SlackBot:
                 self._llm.temperature = temperature 
             except: # FakeLLM
                 pass
+        if self._verbose:
+            self._app.logger.info(f"LLM Temperature changed to {temperature}")
 
+    def define_thread_retriever_db(self, channel_id: str,
+                                     ts: float, docs : List[Document]
+                                     ) -> None:
+        """
+        Defines the thread retriever docs for a given channel.
+        """
+        if channel_id not in self._thread_retriever_db:
+            self._thread_retriever_db[channel_id] = {}
+            if not os.path.exists(f"{db_dir}/{channel_id}"):
+                os.mkdir(f"{db_dir}/{channel_id}")
+        persist_directory = f"{db_dir}/{channel_id}/{ts}"
+        if ts not in self._thread_retriever_db[channel_id]:
+            os.mkdir(persist_directory)
+            
+            db = VStore.from_documents(docs, embedding=self._embeddings,
+                                       persist_directory=persist_directory,
+                                       client_settings=Settings(
+                                            chroma_db_impl='duckdb+parquet',
+                                            persist_directory=persist_directory,
+                                            anonymized_telemetry=False
+                                            )
+                                        )
+            
+            db.persist()
+            db = None
+            self._thread_retriever_db[channel_id][ts] = persist_directory
+            self._app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
+
+
+    def get_thread_retriever_db_path(self, channel_id: str, ts: float
+                                  ) -> VectorStore:
+        """
+        Retuns the thread retriever docs for a given channel.
+        """
+        return self._thread_retriever_db[channel_id][ts]
+    
     def define_channel_llm_info(self, channel_id: str,
                                 channel_bot_info: Dict[str, Union[str, float]]
                                 ) -> None:
@@ -220,14 +281,16 @@ class SlackBot:
         Defines the LLM info for a given channel
         """
         self._channels_llm_info[channel_id] = channel_bot_info
+        self._app.logger.info(f"Defined Channel {channel_id} info")
         with open(llm_info_file, 'w') as f:
                 json.dump(self._channels_llm_info, f, ensure_ascii=False, indent=4)
 
-    def get_channel_llm_info(self, channel_id: str) -> Dict[str, Union[str, float]]:
+    def get_channel_llm_info(self, channel_id: str
+                             ) -> Dict[str, Union[str, float]]:
         """
         Get the LLM info for a given channel
         """
-        if channel_id not in self._channels_llm_info.keys():
+        if channel_id not in self._channels_llm_info:
             self.define_channel_llm_info(channel_id, self._default_llm_info) 
         return self._channels_llm_info[channel_id]
     
@@ -236,6 +299,7 @@ class SlackBot:
         Define the allowed users fot the bot
         """
         self._allowed_users["users"] = users_list
+        self._app.logger.info(f"Defined allowed users: {users_list}")
         with open(permissions_file, 'w') as f:
                 json.dump(self._allowed_users, f, ensure_ascii=False, indent=4)
 

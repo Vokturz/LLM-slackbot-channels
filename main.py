@@ -20,8 +20,9 @@ else:
     config = dict(model_name="gpt-3.5-turbo", temperature=0.8, max_tokens=500)
 
 # Initialize LLM and embeddings
+bot.app.logger.info("Initiazing LLM and embeddings...")
 bot.initialize_llm(model_type, max_tokens_threads=500, handler=handler, config=config)
-#bot.initialize_embeddings(model_type)
+bot.initialize_embeddings(model_type)
 
 # Create handlers for commands /ask, /modify_bot, /bot_info  and bot mentions
 create_handlers(bot)

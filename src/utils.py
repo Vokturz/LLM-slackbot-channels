@@ -6,6 +6,9 @@ from typing import (Dict, Optional, Any, Union, Tuple, List, Set)
 from slack_bolt import (Say, Respond)
 from .slackbot import SlackBot
 from langchain import PromptTemplate, LLMChain
+from langchain.chains import RetrievalQA
+from langchain.vectorstores import Chroma
+from chromadb.config import Settings
 
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -64,7 +67,8 @@ async def get_llm_reply(bot: SlackBot,
                         respond: Respond, 
                         prompt: PromptTemplate, 
                         parsed_body: Dict[str, Union[str, float]],
-                        messages_history: List[str]=[]
+                        messages_history: List[str]=[],
+                        first_ts : Optional[float]=None
                         ) -> Tuple[str, Optional[Say]]:
     """
     Generate a response using the bot's language model, given a prompt and
@@ -90,10 +94,17 @@ async def get_llm_reply(bot: SlackBot,
                                                                     thread_ts)
         # ConversationTokenBufferMemory approach
         messages_history, warning_msg = custom_token_memory(bot, messages_history)
+        
+        if "context" in prompt.input_variables:
+            # start from the third message
+            # the last message is pass separated
+            messages_history = messages_history[2:-1]
+            # set who ask the question
+            to_chain['user'] = parsed_body['user_id']
         to_chain['conversation'] = ('\n'.join(messages_history)
                                      .replace('\n\n', '\n'))
         to_chain['users'] = ' '.join(list(users))
-        
+               
     
     # send initial message if applicable
     if parsed_body['to_all']:
@@ -122,17 +133,50 @@ async def get_llm_reply(bot: SlackBot,
             await asyncio.sleep(10)
 
         # generate response
-        chain = LLMChain(llm=bot.llm, prompt=prompt)
-        resp_llm = await chain.arun(to_chain)
+        if "context" in prompt.input_variables:
+            # is a QA question, requires context
+            db_path = bot.get_thread_retriever_db_path(parsed_body['channel_id'],
+                                                        first_ts)
+            vectorstore = Chroma(persist_directory=db_path,
+                                 embedding_function=bot.embeddings,
+                                 client_settings=Settings(
+                                            chroma_db_impl='duckdb+parquet',
+                                            persist_directory=db_path,
+                                            anonymized_telemetry=False)
+                                )
+            chain = RetrievalQA.from_llm(llm=bot.llm, prompt=prompt.partial(**to_chain),
+                                         retriever=vectorstore.as_retriever())
+            resp_llm = await chain.arun(query=parsed_body["query"])
+            
+        else:
+            # is not a QA question
+            chain = LLMChain(llm=bot.llm, prompt=prompt)
+            resp_llm = await chain.arun(to_chain)
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
         bot.change_temperature(temperature=actual_temp)
 
     if bot.verbose:
+        if "context" in prompt.input_variables:
+            to_chain["question"] = parsed_body["query"]
+            docs = vectorstore.similarity_search(parsed_body["query"])
+            to_chain["context"] = '\n'.join([doc.page_content for doc in docs])
         n_tokens =  bot.llm.get_num_tokens(prompt.format(**to_chain))
         response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
+        bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
     return response, initial_message
+
+
+async def extract_first_message_thread(bot: SlackBot,
+                                       channel_id:str,
+                                       thread_ts: float
+                                        ) -> Dict[str, Any]:
+    client = bot.app.client
+    bot_user_id = bot.bot_user_id
+    result = await client.conversations_replies(channel=channel_id, ts=thread_ts)    
+    messages = result['messages']
+    return messages[0]
 
 async def extract_thread_conversation(bot: SlackBot, channel_id:str,
                                         thread_ts: float
@@ -160,7 +204,7 @@ async def extract_thread_conversation(bot: SlackBot, channel_id:str,
         else:
             text = re.sub(r'!temp=([\d.]+)', '', text)
             if actual_user != user:
-                users.add(f'<@{user}>') # if was not added
+                users.add(f'<@{user}>') # if it was not added
                 messages_history.append(f'<@{user}>: {text}')
                 actual_user = user
             else: # The same user is talking
@@ -191,4 +235,5 @@ def custom_token_memory(bot: SlackBot,
             warning_msg = (f"\n_Thread too long: `{init_n_tokens} >"
                            f" (max_tokens_threads={bot.max_tokens_threads})`,"
                            f" first {n_removed} messages were removed._")
+            bot.app.logger.warning(warning_msg)
     return messages_history, warning_msg
