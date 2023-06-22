@@ -6,7 +6,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from langchain.llms import (OpenAI, CTransformers, FakeListLLM)
 from langchain.chat_models import ChatOpenAI
-from langchain.embeddings import (HuggingFaceEmbeddings, FakeEmbeddings)
+from langchain.embeddings import (HuggingFaceEmbeddings, FakeEmbeddings, OpenAIEmbeddings)
 from langchain.embeddings.base import Embeddings
 from langchain.llms.base import LLM
 from langchain.docstore.document import Document
@@ -147,6 +147,8 @@ class SlackBot:
         model_type = model_type.lower()
         if model_type == 'fakellm':
             self._embeddings = FakeEmbeddings(size=768)
+        elif model_type == 'openai':
+            self._embeddings = OpenAIEmbeddings()
         else:
             try:
                 emb_model = os.environ['EMB_MODEL']
