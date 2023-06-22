@@ -1,0 +1,64 @@
+{
+	"type": "modal",
+	"callback_id": "modify_permissions",
+	"title": {
+		"type": "plain_text",
+		"text": "Permissions",
+		"emoji": true
+	},
+	"submit": {
+		"type": "plain_text",
+		"text": "Submit",
+		"emoji": true
+	},
+	"close": {
+		"type": "plain_text",
+		"text": "Cancel",
+		"emoji": true
+	},
+	"blocks": [
+		{
+			"type": "section",
+			"block_id": "allowed_users",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Modify which users can use the bot"
+			},
+			"accessory": {
+				"action_id": "permissions_select_user",
+				"type": "multi_users_select",
+				"initial_users": [
+					"U12345678"
+				],
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select users"
+				}
+			}
+		},
+		{
+			"type": "input",
+			"optional": true,
+			"block_id": "notify_users",
+			"element": {
+				"type": "checkboxes",
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "Notify users",
+							"emoji": true
+						},
+						"value": "notify_users"
+					}
+				],
+				"action_id": "notify_users"
+			},
+			"label": {
+				"type": "plain_text",
+				"text": " ",
+				"emoji": true
+			}
+		}
+	]
+}
