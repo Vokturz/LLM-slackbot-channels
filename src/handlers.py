@@ -17,6 +17,7 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 
 def create_handlers(bot: SlackBot) -> None:
     @bot.app.command("/ask")
+    @bot.check_permissions
     async def handle_ask(ack: Ack, respond: Respond, say: Say,
                         command: Dict[str, Any]) -> None:
         """
@@ -65,6 +66,7 @@ def create_handlers(bot: SlackBot) -> None:
             await respond(response)
 
     @bot.app.command("/modify_bot")
+    @bot.check_permissions
     async def handle_modify_bot(ack: Ack, body: Dict[str, Any],
                                 respond : Respond) -> None:
         await ack()
@@ -97,8 +99,7 @@ def create_handlers(bot: SlackBot) -> None:
         view["private_metadata"] =  json.dumps({"channel_id": channel_id})
 
         # Open view for bot modification
-        client = bot.app.client
-        await client.views_open(trigger_id=trigger_id, view=view)
+        await bot.app.client.views_open(trigger_id=trigger_id, view=view)
         
     @bot.app.view('modify_bot')
     async def handle_modify_bot_view(ack: Ack, body: Dict[str, Any],
@@ -166,7 +167,100 @@ def create_handlers(bot: SlackBot) -> None:
         # Send the response to the user
         await respond(response)
 
+    @bot.app.command("/permissions") # Don't ask for allowed_users
+    async def handle_permissions(ack: Ack, body: Dict[str, Any],
+                                respond : Respond) -> None:
+        await ack()
+        """
+        Handle the /permissions command. 
+        By default all users have access to the bot
+        Modify the list of users allowed to use the bot.
+        This command requires a password to be entered
+        """
+        password = body["text"].strip()
+        channel_id = body['channel_id']
+        trigger_id = body['trigger_id']
+
+        # Check if the password was defined
+        try: 
+            permissions_psswd = os.environ["PERMISSIONS_PASSWORD"]
+            if permissions_psswd == "":
+                return
+        except:
+            return
+        
+        # Check if the password is correct
+        if password != permissions_psswd:
+            await respond(text=":x: Incorrect password")
+            return
+        
+        # Load permissions_template.json payload
+        with open(f'{current_directory}/payloads/permissions_template.json', 'r') as f:
+            view = json.load(f)
+        
+        # Get all the members of the Slack
+        if "@all" in bot.allowed_users["users"]:
+            users = (await bot.app.client.users_list())["members"]
+            options = []
+            for user in users:
+                if user["id"] not in [bot.bot_user_id, "USLACKBOT"]:
+                    options.append(user["id"])
+        else:
+            options = bot.allowed_users["users"]
+
+        # Add options
+        view["blocks"][0]["accessory"]["initial_users"] = options
+
+        # Include channel_id in private_metadata
+        view["private_metadata"] =  json.dumps({"channel_id": channel_id})
+        # Open view for bot modification
+        await bot.app.client.views_open(trigger_id=trigger_id, view=view)
+
+    @bot.app.view('modify_permissions')
+    async def handle_modify_bot_view(ack: Ack, body: Dict[str, Any],
+                                     say: Say, view: Dict[str, Any]) -> None:
+        """
+        Handle the modify_permissions view.
+        """
+        user = body['user']['id']
+        channel_id = json.loads(view["private_metadata"])["channel_id"]
+        allowed_users = view['state']['values']['allowed_users']
+        checkbox = view['state']['values']['notify_users']['notify_users']
+        first_item = next(iter(allowed_users))
+        allowed_users = allowed_users[first_item]['selected_users']
+        await ack()
+
+        permissions_lock = asyncio.Lock()
+        async with permissions_lock:
+            if len(checkbox['selected_options'])>0:
+                previous_list = bot.allowed_users["users"]
+                messages = {}
+                for _user in previous_list:
+                    if _user not in allowed_users:
+                        messages[_user] = (f"<@{user}> has removed your permission"
+                                      f" to use <@{bot.bot_user_id}>.")
+                for _user in allowed_users:
+                    if _user not in previous_list:
+                        messages[_user] = (f"<@{user}> has granted you permission"
+                                      f" to use <@{bot.bot_user_id}>.")
+
+                for _user,msg in messages.items():
+                    client = bot.app.client
+                    response = await client.conversations_open(users=_user)
+                    user_channel = response['channel']['id']
+                    await client.chat_postEphemeral(channel=user_channel ,
+                                                    user=_user,
+                                                    text=msg)
+        bot.define_allowed_users(allowed_users)
+
+    @bot.app.action("permissions_select_user")
+    async def handle_perimissions_select_user(ack: Ack):
+        " Just to pass action of selecting an user"
+        await ack()
+        return
+        
     @bot.app.event("app_mention")
+    @bot.check_permissions
     async def handle_mention(say: Say, 
                              body: Dict[str, Any]) -> None:
         """

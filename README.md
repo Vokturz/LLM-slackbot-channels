@@ -18,7 +18,12 @@ LLM-SlackBot-Channels is a Slack bot built using the Slack Bolt framework. It en
 - **/bot_info**
     This command presents the initial prompt used by the bot, as well as the default 'temperature' for generating responses.
 
+- **/permissions** (optional)
+    This command modify which users can interact with the bot. It requires a password defined in the environment variables
 
+    Command syntax: `/permissions <PERMISSIONS_PASSWORD>` 
+
+    If no password was defined inside `.env`, then this command do nothing.
 ### Mentions
 When the bot is mentioned in a thread, it can respond based on the context. The context limit is handled using a `max token limit` in a similar way as `ConversationTokenBufferMemory` from langchain.
 
@@ -45,6 +50,7 @@ CTRANSFORMERS_MODEL= model name from HuggingFace or model path in your computer
 EMB_MODEL=all-MiniLM-L6-v2 # Embedding model, not currently used
 SLACK_BOT_TOKEN=xoxb-... Slack API Bot Token 
 SLACK_APP_TOKEN=xapp-... Slack API App Token
+PERMISSIONS_PASSWORD=CHANGEME # Password to activate /permissions command
 ```
 
 ### Starting the Bot
@@ -60,6 +66,7 @@ The bot requires the following permissions:
    - `/ask` Ask a question or make a request
    - `/modify_bot` Modify bot's configuration for the current channel 
    - `/bot_info` Get *prompt* and *temperature* of the bot in the current channel
+   - `/permissions` (optional)  Modify which users can interact with the bot
 3. Enable **Events**
    - Subscribe to `app_mention`
 4. Set **Scopes**
@@ -68,10 +75,10 @@ The bot requires the following permissions:
    - `channels:join`
    - `channels:read`
    - `chat:write`
-
+   - `im:write`  _<- To notify users about change in permissions_
 ## ToDo / Ideas
+- [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
 - [ ] Deployment in [Modal.com](https://modal.com/)
 - [ ] Create tests
 - [ ] A `!ingest` command to create a vector database and use a QA retriever
 - [ ] Solve ChatOpenAI problem: message history for multiples users
-- [ ] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`

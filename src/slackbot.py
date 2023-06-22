@@ -13,6 +13,7 @@ from langchain.llms.base import LLM
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 llm_info_file = f'{current_directory}/../data/channels_llm_info.json'
+permissions_file = f'{current_directory}/../data/permissions.json'
 
 class SlackBot:
     def __init__(self, name: str='SlackBot',
@@ -65,6 +66,25 @@ class SlackBot:
         else:
             self._channels_llm_info = {}
 
+        try:
+            psswd = os.environ["PERMISSIONS_PASSWORD"]
+        except:
+            psswd = ""
+
+        if psswd == "CHANGEME":
+            logger.warning(f"You should change the password \"{psswd}\"")
+        if psswd == "":
+            logger.warning(f"No password provided! Command /permissions will not work")
+
+        # This could be loaded using pydantic
+        if os.path.exists(permissions_file):
+            with open(permissions_file, 'r') as f:
+                allowed_users = json.load(f)
+                self._allowed_users = allowed_users
+        else:
+            self._allowed_users = {"users" : ["@all"]}
+
+            
     def initialize_llm(self, model_type: str,
                        max_tokens_threads: int = 2000,
                        handler: Optional[Callable] = None,
@@ -157,8 +177,13 @@ class SlackBot:
         return self._llm
 
     @property
-    def max_tokens_threads(self):
+    def allowed_users(self) -> Dict:
+        return self._allowed_users
+    
+    @property
+    def max_tokens_threads(self) -> int:
         return self._max_tokens_threads
+    
     @property
     def embeddings(self) -> Embeddings:
         return self._embeddings
@@ -205,3 +230,39 @@ class SlackBot:
         if channel_id not in self._channels_llm_info.keys():
             self.define_channel_llm_info(channel_id, self._default_llm_info) 
         return self._channels_llm_info[channel_id]
+    
+    def define_allowed_users(self, users_list: List) -> None:
+        """
+        Define the allowed users fot the bot
+        """
+        self._allowed_users["users"] = users_list
+        with open(permissions_file, 'w') as f:
+                json.dump(self._allowed_users, f, ensure_ascii=False, indent=4)
+
+    
+    def check_permissions(self, func: Callable[..., None]) -> Callable[..., None]:
+        """
+        Decorator that checks if the user has permission to use the command.
+        """
+        
+        import functools
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            body = kwargs["body"] if "body" in kwargs else kwargs["command"]
+            respond = kwargs["respond"] if "respond" in kwargs else None
+            ack = kwargs["ack"] if "ack" in kwargs else None
+            if "event" in body:
+                user = body["event"]["user"]
+            else:
+                user = body["user_id"]
+
+            if (user in self._allowed_users["users"] or
+                "@all" in self._allowed_users["users"] ):
+                return await func(*args, **kwargs)
+            else:
+                if ack:
+                    await ack()
+                if respond:
+                    await respond(":x: You don't have permissions to use this command")
+                return
+        return wrapper
