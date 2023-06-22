@@ -346,6 +346,7 @@ def create_handlers(bot: SlackBot) -> None:
                 )
         else:
             if "files" in body['event'].keys():
+                extra_separators = re.findall(r'!sep=(\S+)', parsed_body["query"])
                 files =  body['event']['files']
                 file_name_list = []
                 for _file in files:
@@ -365,7 +366,8 @@ def create_handlers(bot: SlackBot) -> None:
                         file_name_list.append(file_name)
                         doc_list.append(load_single_document(f'data/tmp/{file_name}', pretty_type))
                         save_file.unlink()
-                    texts = process_documents(doc_list, chunk_size=1000, chunk_overlap=0)   
+                    texts = process_documents(doc_list, chunk_size=500, chunk_overlap=50,
+                                               extra_separators=extra_separators)   
                     bot.define_thread_retriever_db(channel_id, body['event']['ts'], texts)
                 await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
                           thread_ts=body['event']['ts'])

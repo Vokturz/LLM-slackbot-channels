@@ -46,12 +46,14 @@ def load_single_document(file_path: str, pretty_type: str) -> List[Document]:
         pass
 
 def process_documents(documents: List[Document],
-                      chunk_size: int, chunk_overlap:
-                      int) -> List[Document]:
+                      chunk_size: int, chunk_overlap: int,
+                      extra_separators: List[str]) -> List[Document]:
     """
     Load documents and split in chunks
     """
+    separators = extra_separators + ["\n\n", "\n", " ", ""]
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
-                                                   chunk_overlap=chunk_overlap)
+                                                   chunk_overlap=chunk_overlap
+                                                   )
     texts = text_splitter.split_documents(documents)
     return texts
