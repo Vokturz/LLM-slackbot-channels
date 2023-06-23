@@ -53,7 +53,8 @@ def process_documents(documents: List[Document],
     """
     separators = extra_separators + ["\n\n", "\n", " ", ""]
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
-                                                   chunk_overlap=chunk_overlap
+                                                   chunk_overlap=chunk_overlap,
+                                                   separators=separators
                                                    )
     texts = text_splitter.split_documents(documents)
     return texts
