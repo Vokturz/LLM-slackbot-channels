@@ -89,6 +89,7 @@ The bot requires the following permissions:
    - `channels:join`
    - `channels:read`
    - `chat:write`
+   - `files:read`
    - `im:write`  _<- To notify users about change in permissions_
    - `users:read`  _<- To get list of users_
 ## ToDo / Ideas
