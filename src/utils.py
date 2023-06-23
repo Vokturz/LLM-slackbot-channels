@@ -6,7 +6,7 @@ from typing import (Dict, Optional, Any, Union, Tuple, List, Set)
 from slack_bolt import (Say, Respond)
 from .slackbot import SlackBot
 from langchain import PromptTemplate, LLMChain
-from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
 from langchain.vectorstores import Chroma
 from chromadb.config import Settings
 
@@ -68,7 +68,8 @@ async def get_llm_reply(bot: SlackBot,
                         prompt: PromptTemplate, 
                         parsed_body: Dict[str, Union[str, float]],
                         messages_history: List[str]=[],
-                        first_ts : Optional[float]=None
+                        first_ts : Optional[float]=None,
+                        qa_prompt : Optional[PromptTemplate]=None
                         ) -> Tuple[str, Optional[Say]]:
     """
     Generate a response using the bot's language model, given a prompt and
@@ -80,10 +81,10 @@ async def get_llm_reply(bot: SlackBot,
 
     to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions']}
 
-     # format prompt and get thread timestamp
+    # format prompt and get thread timestamp
     if 'thread_ts' not in parsed_body.keys():
         to_chain['query'] = parsed_body['query']
-        # No warning message from reducing thread messages
+        # No warning message from reducing number of thread messages
         thread_ts = None
         warning_msg = ""
     else:
@@ -95,13 +96,12 @@ async def get_llm_reply(bot: SlackBot,
         # ConversationTokenBufferMemory approach
         messages_history, warning_msg = custom_token_memory(bot, messages_history)
         
-        if "context" in prompt.input_variables:
+        if qa_prompt:
+            qa_prompt = qa_prompt.partial(**to_chain)
             # start from the third message
             # the last message is pass separated
             messages_history = messages_history[2:-1]
-            # set who ask the question
-            to_chain['user'] = parsed_body['user_id']
-        to_chain['conversation'] = ('\n'.join(messages_history)
+        to_chain['chat_history'] = ('\n'.join(messages_history)
                                      .replace('\n\n', '\n'))
         to_chain['users'] = ' '.join(list(users))
                
@@ -133,7 +133,7 @@ async def get_llm_reply(bot: SlackBot,
             await asyncio.sleep(10)
 
         # generate response
-        if "context" in prompt.input_variables:
+        if qa_prompt:
             # is a QA question, requires context
             db_path = bot.get_thread_retriever_db_path(parsed_body['channel_id'],
                                                         first_ts)
@@ -144,9 +144,17 @@ async def get_llm_reply(bot: SlackBot,
                                             persist_directory=db_path,
                                             anonymized_telemetry=False)
                                 )
-            chain = RetrievalQA.from_llm(llm=bot.llm, prompt=prompt.partial(**to_chain),
-                                         retriever=vectorstore.as_retriever())
-            resp_llm = await chain.arun(query=parsed_body["query"])
+            prompt = prompt.partial(personality=to_chain['personality'],
+                                    instructions=to_chain['instructions'],
+                                    users=to_chain['users'])
+            chain = ConversationalRetrievalChain
+            chain = chain.from_llm(bot.llm,
+                                   vectorstore.as_retriever(kwargs={'k': 5}),
+                                   combine_docs_chain_kwargs={"prompt" : qa_prompt},
+                                   condense_question_prompt=prompt,
+                                   get_chat_history=lambda x : x)
+            resp_llm = await chain.arun({'question': parsed_body['query'],
+                                         'chat_history': to_chain['chat_history']})
             
         else:
             # is not a QA question
@@ -157,10 +165,8 @@ async def get_llm_reply(bot: SlackBot,
         bot.change_temperature(temperature=actual_temp)
 
     if bot.verbose:
-        if "context" in prompt.input_variables:
+        if qa_prompt:
             to_chain["question"] = parsed_body["query"]
-            docs = vectorstore.similarity_search(parsed_body["query"])
-            to_chain["context"] = '\n'.join([doc.page_content for doc in docs])
         n_tokens =  bot.llm.get_num_tokens(prompt.format(**to_chain))
         response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
         bot.app.logger.info(response.replace('\n', ''))

@@ -306,27 +306,25 @@ def create_handlers(bot: SlackBot) -> None:
            # Generate the prompt
             if 'files' not in first_message:
                 # Is not a QA thread
-                prompt = PromptTemplate(template=prompts.THREAD_PROMPT,
-                                        input_variables=['personality',
-                                                         'instructions',
-                                                         'users',
-                                                         'conversation'])
+                prompt = PromptTemplate.from_template(template=prompts.THREAD_PROMPT)
                 if bot.verbose:
                     bot.app.logger.info(f"Asking thread"
                                         f" {channel_id}/{first_message['ts']}:"
                                         f" {parsed_body['query']}")
+                qa_prompt = None
             else:
                 # Is a QA thread
-                prompt = PromptTemplate(template=prompts.THREAD_QA_PROMPT,
-                                        input_variables=['personality',
-                                                         'instructions',
-                                                         'context',
-                                                         'users',
-                                                         'user', # who ask
-                                                         'question',
-                                                         'conversation'])
+                prompt = PromptTemplate.from_template(template=prompts.CONDENSE_QUESTION_PROMPT)
+                qa_prompt = PromptTemplate.from_template(template=prompts.QA_PROMPT)
+                extra_context = re.sub(r'!sep=\S+', '',first_message['text'])
+                extra_context = extra_context.replace('<@'+bot.bot_user_id+'>', '')
+                extra_context = re.sub(r'\s+', ' ', extra_context).strip()
+                if len(extra_context)<3:
+                    extra_context = 'files'
+                qa_prompt = qa_prompt.partial(extra_context=extra_context)
                 if bot.verbose:
-                    bot.app.logger.info(f"Asking RetrievalQA thread"
+                    bot.app.logger.info(f"Asking RetrievalQA thread about"
+                                        f" {extra_context}:"
                                         f" {channel_id}/{first_message['ts']}:"
                                         f" {parsed_body['query']}")
             # Get reply and update initial message
@@ -334,7 +332,8 @@ def create_handlers(bot: SlackBot) -> None:
             response, initial_message = await get_llm_reply(bot, say, None,
                                                             prompt,
                                                             parsed_body,
-                                                            first_ts=first_message['ts'])
+                                                            first_ts=first_message['ts'],
+                                                            qa_prompt=qa_prompt)
 
                 
 
