@@ -94,6 +94,7 @@ The bot requires the following permissions:
 ## ToDo / Ideas
 - [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
 - [x] A `ingest` method to create a vector database and use a QA retriever
+- [ ] A way to delete unused QA threads (time limit?)
 - [ ] Deployment in [Modal.com](https://modal.com/)
 - [ ] Create tests
 - [ ] Solve ChatOpenAI problem: message history for multiples users
