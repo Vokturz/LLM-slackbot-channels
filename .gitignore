@@ -167,3 +167,4 @@ data/tmp/*
 !data/.gitkeep
 !data/db/.gitkeep
 !data/tmp/.gitkeep
+.chroma/*
