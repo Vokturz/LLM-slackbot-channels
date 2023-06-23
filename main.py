@@ -9,7 +9,11 @@ handler = StreamingStdOutCallbackHandler()
 load_dotenv()
 
 # Create SlackBot instance
-bot = SlackBot(name='SlackBot', verbose=True)
+bot = SlackBot(name='SlackBot', verbose=True,
+               chunk_size=500, # Chunk size for splitter
+               chunk_overlap=50, # Chunk overlap for splitter
+               k_similarity=5 # Numbers of chunks to return in retriever
+               )
 
 ## LLM configuration
 model_type = 'openai'
