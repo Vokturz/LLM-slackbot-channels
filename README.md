@@ -89,6 +89,7 @@ The bot requires the following permissions:
    - `channels:join`
    - `channels:read`
    - `chat:write`
+   - `files:read`
    - `im:write`  _<- To notify users about change in permissions_
 ## ToDo / Ideas
 - [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
