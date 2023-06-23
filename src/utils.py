@@ -149,7 +149,7 @@ async def get_llm_reply(bot: SlackBot,
                                     users=to_chain['users'])
             chain = ConversationalRetrievalChain
             chain = chain.from_llm(bot.llm,
-                                   vectorstore.as_retriever(kwargs={'k': 5}),
+                                   vectorstore.as_retriever(kwargs={'k': bot.k_similarity}),
                                    combine_docs_chain_kwargs={"prompt" : qa_prompt},
                                    condense_question_prompt=prompt,
                                    get_chat_history=lambda x : x)

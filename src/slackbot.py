@@ -29,7 +29,8 @@ class SlackBot:
                                            " user's questions. Answers in no more"
                                            " than 40 words. You must format your"
                                            " messages in Slack markdown.",
-                 default_temp: float=0.8, verbose: bool=False) -> None:
+                 default_temp: float=0.8, chunk_size=500, chunk_overlap=50,
+                 k_similarity=5, verbose: bool=False) -> None:
         """
         Initialize a new SlackBot instance.
         
@@ -51,6 +52,12 @@ class SlackBot:
         logger.addHandler(console_handler)
 
         self._default_temp = default_temp
+
+        # for Retriever
+        self._chunk_size = chunk_size
+        self._chunk_overlap = chunk_overlap
+        self._k_similarity = k_similarity
+
         try:
             self._bot_token = os.environ['SLACK_BOT_TOKEN']
             self._app_token = os.environ['SLACK_APP_TOKEN']
@@ -172,6 +179,18 @@ class SlackBot:
         llm = self._llm
         resp = await llm.agenerate([query])
         return resp.generations[0][0].text
+    
+    @property
+    def chunk_size(self):
+        return self._chunk_size
+    
+    @property
+    def chunk_overlap(self):
+        return self._chunk_overlap
+
+    @property
+    def k_similarity(self):
+        return self._k_similarity
     
     @property
     def app(self) -> AsyncApp:
