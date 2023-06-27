@@ -4,3 +4,6 @@ python-dotenv==1.0.0
 slack_bolt==1.18.0
 tiktoken==0.4.0
 requests==2.31.0
+PyMuPDF==1.22.3
+unstructured==0.6.6
+tabulate==0.9.0

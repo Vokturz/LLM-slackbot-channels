@@ -140,12 +140,12 @@ class SlackBot:
                              callbacks=[handler], config=config)
             
         else:
-            # if (config["model_name"].startswith("gpt-3.5")
-            #     or config["model_name"].startswith("gpt-4")):
-            #     self._llm = ChatOpenAI(callbacks=[handler], **config)
-            # else:
-            #     self._llm = OpenAI(callbacks=[handler], **config)
-            self._llm = OpenAI(callbacks=[handler], **config)
+            if (config["model_name"].startswith("gpt-3.5")
+                or config["model_name"].startswith("gpt-4")):
+                self._llm = ChatOpenAI(callbacks=[handler], **config)
+            else:
+                self._llm = OpenAI(callbacks=[handler], **config)
+            # self._llm = OpenAI(callbacks=[handler], **config)
             
     def initialize_embeddings(self, model_type: str) -> None:
         """
