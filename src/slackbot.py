@@ -127,7 +127,7 @@ class SlackBot:
         model_type = model_type.lower()
         self._model_type = model_type
         if model_type == 'fakellm':
-            responses = [f'foo{i}' for i in range(1000)]
+            responses = [f'foo' for i in range(1000)]
             self._llm = FakeListLLM(responses = responses)
 
         elif model_type != 'openai':
@@ -348,6 +348,6 @@ class SlackBot:
                 if ack:
                     await ack()
                 if respond:
-                    await respond(":x: You don't have permissions to use this command")
+                    await respond(text=":x: You don't have permissions to use this command")
                 return
         return wrapper
