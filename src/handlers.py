@@ -95,7 +95,12 @@ def create_handlers(bot: SlackBot) -> None:
         view["blocks"][2]["element"]["initial_value"] = str(channel_bot_info['temperature'])
 
         # Include channel_id in private_metadata
-        view["private_metadata"] =  json.dumps({"channel_id": channel_id})
+        extra_data = {"channel_id": channel_id}
+        if '!no-notify' in body['text']:
+            extra_data["notify"] = False
+        else:
+            extra_data["notify"] = True
+        view["private_metadata"] =  json.dumps(extra_data)
 
         # Open view for bot modification
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
@@ -114,6 +119,7 @@ def create_handlers(bot: SlackBot) -> None:
         
         # Extract channel ID and user ID
         channel_id = json.loads(view["private_metadata"])["channel_id"]
+        notify = json.loads(view["private_metadata"])["notify"]
         user = body['user']['id']
 
          # Iterate through each bot value and update it
@@ -136,7 +142,8 @@ def create_handlers(bot: SlackBot) -> None:
         await ack()
 
         # Notify channel of bot modification
-        await say(f'_*<@{user}> has modified the bot info*_', channel=channel_id)
+        if notify:
+            await say(f'_*<@{user}> has modified the bot info*_', channel=channel_id)
 
     @bot.app.command("/bot_info")
     async def handle_bot_info(ack: Ack, respond: Respond,

@@ -6,7 +6,7 @@ LLM-SlackBot-Channels is a Slack bot built using the Slack Bolt framework. It en
 ## Commands
 
 - **/modify_bot**
-    This command allows you to customize the bot's personality, instructions, and temperature within the channel it's operating in.
+    This command allows you to customize the bot's personality, instructions, and temperature within the channel it's operating in. If `!no-notify` is included, then no notification is sent to the channel.
 
     ![/modify_bot](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExb3Q1MGJyeWh0OGRsZXZsb2UwZ2pzenc5MGV1M2JzY2x3ZGxkdHQwayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/ebkaDNhWuwaXuTtCuq/giphy.gif)
 
