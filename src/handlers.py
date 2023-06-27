@@ -59,7 +59,7 @@ def create_handlers(bot: SlackBot) -> None:
             await client.chat_update(channel=channel_id, ts=initial_message['ts'], 
                                      text=response)
         else:
-            await respond(response)
+            await respond(text=response)
 
     @bot.app.command("/modify_bot")
     @bot.check_permissions
@@ -166,7 +166,7 @@ def create_handlers(bot: SlackBot) -> None:
         response += f"`\n*Temperature:* {bot_info['temperature']}"
 
         # Send the response to the user
-        await respond(response)
+        await respond(text=response)
 
     @bot.app.command("/permissions") # Don't ask for allowed_users
     async def handle_permissions(ack: Ack, body: Dict[str, Any],
@@ -221,7 +221,7 @@ def create_handlers(bot: SlackBot) -> None:
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
 
     @bot.app.view('modify_permissions')
-    async def handle_modify_bot_view(ack: Ack, body: Dict[str, Any],
+    async def handle_modify_permissions_view(ack: Ack, body: Dict[str, Any],
                                      say: Say, view: Dict[str, Any]) -> None:
         """
         Handle the modify_permissions view.
@@ -378,3 +378,11 @@ def create_handlers(bot: SlackBot) -> None:
                         " If you want to include me on a discussion"
                         ", you have to mention me in a _thread_.")
 
+    return {"handle_ask": handle_ask,
+            "handle_modify_bot": handle_modify_bot,
+            "handle_modify_bot_view": handle_modify_bot_view,
+            "handle_bot_info" : handle_bot_info,
+            "handle_permissions" : handle_permissions,
+            "handle_modify_permissions_view" : handle_modify_permissions_view,
+            #"handle_mention" : handle_mention
+            }
