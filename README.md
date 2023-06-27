@@ -97,4 +97,3 @@ The bot requires the following permissions:
 - [ ] A way to delete unused QA threads (time limit?)
 - [ ] Deployment in [Modal.com](https://modal.com/)
 - [ ] Create tests
-- [ ] Solve ChatOpenAI problem: message history for multiples users
