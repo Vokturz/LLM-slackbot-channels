@@ -94,6 +94,8 @@ The bot requires the following permissions:
    - `files:read`
    - `im:write`  _<- To notify users about change in permissions_
    - `users:read`  _<- To get list of users_
+
+    _Note that for **groups** you will require also `groups:history`, `groups:join` and `groups:read`_ 
 ## ToDo / Ideas
 - [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
 - [x] A `ingest` method to create a vector database and use a QA retriever
