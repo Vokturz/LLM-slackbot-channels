@@ -140,3 +140,4 @@ The bot requires the following permissions:
 - [ ] A way to delete unused QA threads (time limit?)
 - [ ] Deployment in [Modal.com](https://modal.com/)
 - [ ] Create tests
+- [ ] add a custom CallbackHandler to update the messages on the go
