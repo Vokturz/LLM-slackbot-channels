@@ -137,7 +137,7 @@ The bot requires the following permissions:
 ## ToDo / Ideas
 - [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
 - [x] A `ingest` method to create a vector database and use a QA retriever
+- [x] add a custom CallbackHandler to update the messages on the go
 - [ ] A way to delete unused QA threads (time limit?)
 - [ ] Deployment in [Modal.com](https://modal.com/)
 - [ ] Create tests
-- [ ] add a custom CallbackHandler to update the messages on the go
