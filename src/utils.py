@@ -9,6 +9,8 @@ from langchain import PromptTemplate, LLMChain
 from langchain.chains import ConversationalRetrievalChain
 from langchain.vectorstores import Chroma
 from chromadb.config import Settings
+from .custom_callback import CustomAsyncHandler, CustomHandler
+from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -156,7 +158,21 @@ async def get_llm_reply(bot: SlackBot,
     # send initial message
     initial_ts = await send_initial_message(bot, parsed_body, thread_ts)
     
+    if parsed_body['from_command']:
+        initial_msg = f"*<@{parsed_body['user_id']}> asked*: {parsed_body['query']}\n"
+    else:
+        initial_msg = ""
 
+    if parsed_body['to_all']:
+        async_handler = CustomAsyncHandler(bot, channel_id=parsed_body['channel_id'], 
+                                            ts=initial_ts, inital_message=initial_msg)
+ 
+        handler = CustomHandler(bot, channel_id=parsed_body['channel_id'], 
+                                            ts=initial_ts, inital_message=initial_msg)   
+    else:
+        async_handler = AsyncCallbackHandler()
+        handler = BaseCallbackHandler()
+        
     # generate response using language model
     llm_call = asyncio.Lock()
     async with llm_call:
@@ -189,25 +205,27 @@ async def get_llm_reply(bot: SlackBot,
                                    combine_docs_chain_kwargs={"prompt" : qa_prompt},
                                    condense_question_prompt=prompt,
                                    get_chat_history=lambda x : x)
-            try:
+            try: 
                 resp_llm = await chain.arun({'question': parsed_body['query'],
-                                            'chat_history': to_chain['chat_history']})
+                                            'chat_history': to_chain['chat_history']},
+                                            callbacks=[async_handler])
             except NotImplementedError:
                 bot.app.logger.info('No Async generation implemented for this LLM'
                                     ', using concurrent mode')
                 resp_llm = chain.run({'question': parsed_body['query'],
-                            'chat_history': to_chain['chat_history']})
+                            'chat_history': to_chain['chat_history']},
+                              callbacks=[handler])
         else:
-            # is not a QA question
+            # is not a QA question  
             chain = LLMChain(llm=bot.llm, prompt=prompt)
             try:
-                resp_llm = await chain.arun(to_chain)
+                resp_llm = await chain.arun(to_chain, callbacks=[async_handler])
             except NotImplementedError:
-                bot.app.logger.info('No Async generation implemented for this LLM'
-                                    ', using concurrent mode')
-                resp_llm = chain.run(to_chain)
+                bot.app.logger.warning('No Async generation implemented for this LLM'
+                                    ', using concurrent mode')  
+                resp_llm = chain.run(to_chain, callbacks=[handler])
+
         response = resp_llm.strip()
-        
         final_time = round((time.time() - start_time)/60,2)
         bot.change_temperature(temperature=actual_temp)
 
