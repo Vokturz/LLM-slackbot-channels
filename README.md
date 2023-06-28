@@ -65,7 +65,7 @@ Duplicate `example.env` to `.env` and adjust as necessary:
 ```
 OPENAI_API_KEY= Your OpenAI key
 CTRANSFORMERS_MODEL= model name from HuggingFace or model path in your computer
-EMB_MODEL=all-MiniLM-L6-v2 # Embedding model, not currently used
+EMB_MODEL=all-MiniLM-L6-v2 # Embedding model
 SLACK_BOT_TOKEN=xoxb-... Slack API Bot Token 
 SLACK_APP_TOKEN=xapp-... Slack API App Token
 PERMISSIONS_PASSWORD=CHANGEME # Password to activate /permissions command
@@ -76,7 +76,36 @@ To start the bot, simply run:
 ```bash
 python main.py
 ```
+This file contains the basic configuration to run the bot:
+```python
+from src.slackbot import SlackBot
+from src.handlers import create_handlers
 
+bot = SlackBot(name='SlackBot')
+# Set model_type and configuration:
+# OpenAI
+# Llama (CTransformers)
+# FakeLLM (just for testing) 
+model_type='OpenAI'
+config = dict(model_name="gpt-3.5-turbo", temperature=0.8, max_tokens=500)
+
+# Initialize LLM
+# max_tokens_threads refers to the max tokens to consider in a thread message history
+bot.initialize_llm(model_type, max_tokens_threads=2000, config=config)
+
+# Initialize Embeddings
+# If you don't want to use OpenAI Embeddings you can modify this part with llama to use model from EMB_MODEL env variable
+bot.initialize_embeddings(model_type)
+
+# Create handlers for commands /ask, /modify_bot, /bot_info  and bot mentions
+create_handlers(bot)
+
+### You can create new handlers for other commands as follow
+# @bot.app.command("/foo")
+# async def handle_foo(say, respond, ack, command):
+#     await ack()
+#     # do something..
+```
 ## Slack API configuration
 The bot requires the following permissions:
 1. Activate **Incoming Webhooks**
