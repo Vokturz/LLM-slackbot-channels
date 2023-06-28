@@ -45,6 +45,10 @@ See a video example here: [https://youtu.be/nHmkCpmMm5U](https://youtu.be/nHmkCp
     Example: `@LLMBot !sep=\nArticle Political Constitution` with a file attached will try to separate the chunks by `\nArticle` for the VectorStore and will starts a thread about `Political Constitution`.
 
     ![qa_thread](https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExZm44c2d4aXJoZHNtazRnb2QydHY2bjJ2ZGMzZzlrdXZ6Y2lhaXBnMSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/POXlBdBJvs1m9Fog1U/giphy.gif)
+
+
+### How are documents handled?
+The documents are handled using **ChromaDB**, saving the database to `data/db/{channel_id}/{timestamp}` for each QA thread, where `channel_id` refers to the channel which contains the thread and `timestamp` to the time when the QA thread was initiated. It is important to mention that typically embedding models are not compatible, so if you change the embedding model after creating the database for a given QA thread, then that thread will not work.
 ## Usage
 
 ### Requirements 
@@ -106,6 +110,7 @@ create_handlers(bot)
 #     await ack()
 #     # do something..
 ```
+
 ## Slack API configuration
 The bot requires the following permissions:
 1. Activate **Incoming Webhooks**
