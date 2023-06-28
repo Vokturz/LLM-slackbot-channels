@@ -147,7 +147,7 @@ class SlackBot:
                 self._llm = OpenAI(callbacks=[handler], **config)
             # self._llm = OpenAI(callbacks=[handler], **config)
             
-    def initialize_embeddings(self, model_type: str) -> None:
+    def initialize_embeddings(self, model_type: str, **kwargs) -> None:
         """
         Initializes embeddings based on model type.
         """
@@ -155,7 +155,7 @@ class SlackBot:
         if model_type == 'fakellm':
             self._embeddings = FakeEmbeddings(size=768)
         elif model_type == 'openai':
-            self._embeddings = OpenAIEmbeddings()
+            self._embeddings = OpenAIEmbeddings(**kwargs)
         else:
             try:
                 emb_model = os.environ['EMB_MODEL']
