@@ -48,15 +48,14 @@ def create_handlers(bot: SlackBot) -> None:
                                                  'query'])
 
         # Get the response from the LLM
-        response, initial_message = await get_llm_reply(bot, say, respond,
-                                                        prompt, parsed_body)
+        response, initial_ts = await get_llm_reply(bot, prompt, parsed_body)
         # Format the response
         response = f"*<@{user_id}> asked*: {parsed_body['query']}\n*Answer*:\n{response}"
 
         # Send the response to all channel members or just the user who asked
         if parsed_body['to_all']:
             client = bot.app.client
-            await client.chat_update(channel=channel_id, ts=initial_message['ts'], 
+            await client.chat_update(channel=channel_id, ts=initial_ts, 
                                      text=response)
         else:
             await respond(text=response)
@@ -334,20 +333,16 @@ def create_handlers(bot: SlackBot) -> None:
                                         f" {extra_context}:"
                                         f" {channel_id}/{first_message['ts']}:"
                                         f" {parsed_body['query']}")
+                    
             # Get reply and update initial message
-
-            response, initial_message = await get_llm_reply(bot, say, None,
-                                                            prompt,
-                                                            parsed_body,
-                                                            first_ts=first_message['ts'],
-                                                            qa_prompt=qa_prompt)
-
-                
+            response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
+                                                       first_ts=first_message['ts'],
+                                                       qa_prompt=qa_prompt)
 
             client = bot.app.client
             await client.chat_update(
                     channel=channel_id,
-                    ts=initial_message['ts'],
+                    ts=initial_ts,
                     text=response
                 )
         else:

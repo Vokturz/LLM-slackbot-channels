@@ -62,12 +62,78 @@ def parse_format_body(body: Dict[str, Any],
            'from_command' : from_command}
     return res
 
+async def prepare_messages_history(bot: SlackBot,
+                                   parsed_body: Dict[str, Union[str, float]],
+                                   to_chain: Dict[str, Any],
+                                   qa_prompt : Optional[PromptTemplate]
+                                   ) -> Tuple[Dict[str, Any],
+                                              Optional[float],
+                                              Optional[PromptTemplate],
+                                              str]:
+    """
+    If it is a thread, prepare the message history to be sent to the bot.
+    """
+    if 'thread_ts' not in parsed_body.keys():
+        to_chain['query'] = parsed_body['query']
+        thread_ts = None
+        warning_msg = ""
+    else:
+        thread_ts = parsed_body['thread_ts']
+        messages_history, users = await extract_thread_conversation(bot,
+                                                                    parsed_body['channel_id'],
+                                                                    thread_ts)
+        messages_history, warning_msg = custom_token_memory(bot, messages_history)
+        
+        if qa_prompt:
+            qa_prompt = qa_prompt.partial(**to_chain)
+            messages_history = messages_history[2:-1]
+        to_chain['chat_history'] = ('\n'.join(messages_history).replace('\n\n', '\n'))
+        to_chain['users'] = ' '.join(list(users))
+    return to_chain, thread_ts, qa_prompt, warning_msg
+
+async def send_initial_message(bot: SlackBot,
+                               parsed_body: Dict[str, Union[str, float]],
+                               thread_ts: Optional[float]) -> Optional[float]:
+    """
+    Send a initial message "bot is thinking.."
+    """
+    if parsed_body['to_all']:
+        init_msg = f"{bot.name} is thinking.. :hourglass_flowing_sand:"
+        if parsed_body['from_command']:
+            init_msg = (f"*<@{parsed_body['user_id']}> asked*:"
+                        f" {parsed_body['query']}\n" + init_msg)
+        client = bot.app.client
+        msg = await client.chat_postMessage(channel=parsed_body['channel_id'],
+                                      text=init_msg, thread_ts=thread_ts)
+        initial_ts = msg['ts']
+    else:
+        initial_ts = None
+    return initial_ts
+
+
+async def adjust_bot_temperature(bot: SlackBot,
+                                 parsed_body: Dict[str, Union[str, float]]
+                                 ) -> float:
+    """
+    Set bot temperature according to parsed_body
+    """
+    actual_temp = bot.get_temperature()
+    temp = actual_temp
+    if parsed_body['change_temp']:
+        bot.change_temperature(temperature=parsed_body['new_temp'])
+        temp = parsed_body['new_temp']
+    if parsed_body['new_temp'] == -1:
+        if parsed_body["from_command"]:
+            client = bot.app.client
+            warning_msg = (f"`!temp` only accepts values between 0 and 1."
+                           f" Using current value of `{actual_temp}`")
+            await client.chat_postEphemeral(channel=parsed_body['channel_id'],
+                                            text=warning_msg)
+    return temp
+
 async def get_llm_reply(bot: SlackBot, 
-                        say: Say, 
-                        respond: Respond, 
                         prompt: PromptTemplate, 
                         parsed_body: Dict[str, Union[str, float]],
-                        messages_history: List[str]=[],
                         first_ts : Optional[float]=None,
                         qa_prompt : Optional[PromptTemplate]=None
                         ) -> Tuple[str, Optional[Say]]:
@@ -77,61 +143,31 @@ async def get_llm_reply(bot: SlackBot,
     """
     channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
     actual_temp = channel_llm_info['temperature']
-    temp = actual_temp
 
+    # dictionary to format the prompt inside the chain
     to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions']}
 
     # format prompt and get thread timestamp
-    if 'thread_ts' not in parsed_body.keys():
-        to_chain['query'] = parsed_body['query']
-        # No warning message from reducing number of thread messages
-        thread_ts = None
-        warning_msg = ""
-    else:
-        thread_ts = parsed_body['thread_ts']
-        # Extract the conversation thread 
-        messages_history, users = await extract_thread_conversation(bot,
-                                                                    parsed_body['channel_id'],
-                                                                    thread_ts)
-        # ConversationTokenBufferMemory approach
-        messages_history, warning_msg = custom_token_memory(bot, messages_history)
-        
-        if qa_prompt:
-            qa_prompt = qa_prompt.partial(**to_chain)
-            # start from the third message
-            # the last message is pass separated
-            messages_history = messages_history[2:-1]
-        to_chain['chat_history'] = ('\n'.join(messages_history)
-                                     .replace('\n\n', '\n'))
-        to_chain['users'] = ' '.join(list(users))
-               
+    (to_chain, thread_ts,
+      qa_prompt,warning_msg) = await prepare_messages_history(bot,
+                                                              parsed_body,
+                                                              to_chain,
+                                                              qa_prompt)
+    # send initial message
+    initial_ts = await send_initial_message(bot, parsed_body, thread_ts)
     
-    # send initial message if applicable
-    if parsed_body['to_all']:
-        init_msg = f"{bot.name} is thinking.. :hourglass_flowing_sand:"
-        if parsed_body['from_command']:
-            init_msg = (f"*<@{parsed_body['user_id']}> asked*:"
-                        f" {parsed_body['query']}\n" + init_msg)
-        initial_message = await say(init_msg, thread_ts=thread_ts)
-    else:
-        initial_message = None
 
     # generate response using language model
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        bot.change_temperature(temperature=actual_temp)
-        if parsed_body['change_temp']:
-            bot.change_temperature(temperature=parsed_body['new_temp'])
-            temp = parsed_body['new_temp']
-        if parsed_body['new_temp'] == -1:
-            if parsed_body["from_command"]:
-                await respond(f"`!temp` only accepts values between 0 and 1."
-                                f" Using current value of `{actual_temp}`")
-            temp = actual_temp
+        temp = await adjust_bot_temperature(bot, parsed_body)
+
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
 
+        if bot.verbose:
+            bot.app.logger.info('Getting response..')
         # generate response
         if qa_prompt:
             # is a QA question, requires context
@@ -161,6 +197,7 @@ async def get_llm_reply(bot: SlackBot,
             chain = LLMChain(llm=bot.llm, prompt=prompt)
             resp_llm = await chain.arun(to_chain)
         response = resp_llm.strip()
+        
         final_time = round((time.time() - start_time)/60,2)
         bot.change_temperature(temperature=actual_temp)
 
@@ -171,15 +208,17 @@ async def get_llm_reply(bot: SlackBot,
         response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
         bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
-    return response, initial_message
+    return response, initial_ts
 
 
 async def extract_first_message_thread(bot: SlackBot,
                                        channel_id:str,
                                        thread_ts: float
                                         ) -> Dict[str, Any]:
+    """
+    Extracts the first message from a given channel and thread timestamp
+    """
     client = bot.app.client
-    bot_user_id = bot.bot_user_id
     result = await client.conversations_replies(channel=channel_id, ts=thread_ts)    
     messages = result['messages']
     return messages[0]
