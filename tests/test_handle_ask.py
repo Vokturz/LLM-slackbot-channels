@@ -22,6 +22,8 @@ class TestSlackBotCommands(unittest.IsolatedAsyncioTestCase):
         cls.bot.initialize_embeddings(model_type='fakellm')
         # Set allowed user
         cls.bot._allowed_users = {'users' : 'U123456'}
+        # Set channel bot info
+        cls.bot._channels_llm_info = {'C123456' : cls.bot._default_llm_info}
         # Define handlers
         cls.handlers = create_handlers(cls.bot)
     
@@ -87,6 +89,10 @@ class TestSlackBotCommands(unittest.IsolatedAsyncioTestCase):
         self.bot.app.client.chat_update = AsyncMock()
         self.bot.app.client.chat_update.return_value = {'ok': True}
         chat_update = self.bot.app.client.chat_update
+        self.bot.app.client.chat_postMessage = AsyncMock()
+        self.bot.app.client.chat_postMessage.return_value = {'result': 'success', 'ts': ts}
+        chat_postMessage = self.bot.app.client.chat_postMessage
+        
         
         # message contains !all
         command = {'text': '!all Test command',
@@ -100,9 +106,10 @@ class TestSlackBotCommands(unittest.IsolatedAsyncioTestCase):
         
         ack.assert_called_once()
         # initial message
-        say.assert_called_once_with(f"*<@{command['user_id']}> asked*: {command_no_all}"
-                                    f"\nSlackBot is thinking.. :hourglass_flowing_sand:",
-                                    thread_ts=None)
+        init_msg = (f"*<@{command['user_id']}> asked*: {command_no_all}"
+                    f"\nSlackBot is thinking.. :hourglass_flowing_sand:")
+        chat_postMessage.assert_called_once_with(channel=command['channel_id'],
+                                                 text=init_msg, thread_ts=None)
         # final message
         resp =f"*<@{command['user_id']}> asked*: {command_no_all}\n*Answer*:\nfoo"
         chat_update.assert_called_once_with(channel=command['channel_id'], ts=ts, text=resp)
