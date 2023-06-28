@@ -3,6 +3,7 @@
 
 LLM-SlackBot-Channels is a Slack bot built using the Slack Bolt framework. It enables users to interact with a bot through Slack channels using various commands. The bot utilizes a Large Language Model (LLM) to generate responses based on user input.
 
+![](./prompts.png)
 ## Commands
 
 - **/modify_bot**
