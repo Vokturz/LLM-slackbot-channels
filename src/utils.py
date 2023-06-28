@@ -189,13 +189,23 @@ async def get_llm_reply(bot: SlackBot,
                                    combine_docs_chain_kwargs={"prompt" : qa_prompt},
                                    condense_question_prompt=prompt,
                                    get_chat_history=lambda x : x)
-            resp_llm = await chain.arun({'question': parsed_body['query'],
-                                         'chat_history': to_chain['chat_history']})
-            
+            try:
+                resp_llm = await chain.arun({'question': parsed_body['query'],
+                                            'chat_history': to_chain['chat_history']})
+            except NotImplementedError:
+                bot.app.logger.info('No Async generation implemented for this LLM'
+                                    ', using concurrent mode')
+                resp_llm = chain.run({'question': parsed_body['query'],
+                            'chat_history': to_chain['chat_history']})
         else:
             # is not a QA question
             chain = LLMChain(llm=bot.llm, prompt=prompt)
-            resp_llm = await chain.arun(to_chain)
+            try:
+                resp_llm = await chain.arun(to_chain)
+            except NotImplementedError:
+                bot.app.logger.info('No Async generation implemented for this LLM'
+                                    ', using concurrent mode')
+                resp_llm = chain.run(to_chain)
         response = resp_llm.strip()
         
         final_time = round((time.time() - start_time)/60,2)
