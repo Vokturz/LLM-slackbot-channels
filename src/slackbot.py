@@ -113,8 +113,8 @@ class SlackBot:
             
     def initialize_llm(self, model_type: str,
                        max_tokens_threads: int = 2000,
-                       handler: Optional[Callable] = None,
-                       config: Dict[str, Union[float, int]] = None) -> None:
+                       config: Dict[str, Union[float, int]] = None,
+                       **kwargs) -> None:
         """
         Initializes a language model based on the given `model_type`, `handler`, and `config`.
         """
@@ -137,14 +137,14 @@ class SlackBot:
                 raise ValueError("Could not find required environment variable") from e
 
             self._llm = CTransformers(model=model_path, model_type=model_type,
-                             callbacks=[handler], config=config)
+                             config=config, **kwargs)
             
         else:
             if (config["model_name"].startswith("gpt-3.5")
                 or config["model_name"].startswith("gpt-4")):
-                self._llm = ChatOpenAI(callbacks=[handler], **config)
+                self._llm = ChatOpenAI(**config, **kwargs)
             else:
-                self._llm = OpenAI(callbacks=[handler], **config)
+                self._llm = OpenAI(**config, **kwargs)
             # self._llm = OpenAI(callbacks=[handler], **config)
             
     def initialize_embeddings(self, model_type: str, **kwargs) -> None:
