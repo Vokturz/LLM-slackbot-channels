@@ -66,6 +66,11 @@ pip install ctransformers
 pip install openai
 ```
 
+For Open-source embeddings, you will need to install `sentence-transformers`:
+```bash
+pip install sentence-transformers
+```
+
 ### Environment variables
 Duplicate `example.env` to `.env` and adjust as necessary:
 ```
