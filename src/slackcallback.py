@@ -2,12 +2,12 @@ from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 from .slackbot import SlackBot
 from typing import Any, Dict, List
 from langchain.schema import LLMResult
-from .SimpleThrottle import SimpleThrottle
+from .simplethrottle import SimpleThrottle
 import asyncio
 import nest_asyncio
 nest_asyncio.apply()
 
-class CustomAsyncHandler(AsyncCallbackHandler):
+class SlackAsyncCallbackHandler(AsyncCallbackHandler):
     def __init__(self, bot: SlackBot, channel_id: str, ts: float, inital_message : str):
         self.bot = bot
         self.client = bot.app.client
@@ -39,7 +39,7 @@ class CustomAsyncHandler(AsyncCallbackHandler):
         """Run when chain ends running."""
         await self.update_throttle.call_and_wait()
 
-class CustomHandler(BaseCallbackHandler):
+class SlackCallbackHandler(BaseCallbackHandler):
     def __init__(self, bot: SlackBot, channel_id: str,
                   ts: float, inital_message: str):
         self.bot = bot

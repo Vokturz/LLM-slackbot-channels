@@ -9,7 +9,7 @@ from langchain import PromptTemplate, LLMChain
 from langchain.chains import ConversationalRetrievalChain
 from langchain.vectorstores import Chroma
 from chromadb.config import Settings
-from .custom_callback import CustomAsyncHandler, CustomHandler
+from .slackcallback import SlackAsyncCallbackHandler, SlackCallbackHandler
 from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 
 # Get the directory path of the current script
@@ -164,10 +164,10 @@ async def get_llm_reply(bot: SlackBot,
         initial_msg = ""
 
     if parsed_body['to_all']:
-        async_handler = CustomAsyncHandler(bot, channel_id=parsed_body['channel_id'], 
+        async_handler = SlackAsyncCallbackHandler(bot, channel_id=parsed_body['channel_id'], 
                                             ts=initial_ts, inital_message=initial_msg)
  
-        handler = CustomHandler(bot, channel_id=parsed_body['channel_id'], 
+        handler = SlackCallbackHandler(bot, channel_id=parsed_body['channel_id'], 
                                             ts=initial_ts, inital_message=initial_msg)   
     else:
         async_handler = AsyncCallbackHandler()
