@@ -35,7 +35,7 @@ def create_handlers(bot: SlackBot) -> None:
 
         if bot.verbose:
             bot.app.logger.info(f"/ask used by {user_id} in channel {channel_id}:"
-                                f"{command['text']}")
+                                f" {command['text']}")
         # Ensure command is only used in channels
         if channel_id[0] not in ['C', 'G']:
             await respond(text='This command can only be used in channels.')
