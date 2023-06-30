@@ -12,7 +12,8 @@ load_dotenv()
 bot = SlackBot(name='SlackBot', verbose=True,
                chunk_size=500, # Chunk size for splitter
                chunk_overlap=50, # Chunk overlap for splitter
-               k_similarity=5 # Numbers of chunks to return in retriever
+               k_similarity=5, # Numbers of chunks to return in retriever
+               log_filename='_slackbot.log'
                )
 
 ## LLM configuration
@@ -42,4 +43,14 @@ async def start():
     await bot.start()
 
 if __name__ == "__main__":
-    asyncio.run(start())
+    logger = bot.app.logger
+    try:
+        logger.info('App started.')
+        asyncio.run(start())
+    except KeyboardInterrupt:
+        logger.info('App stopped by user.')
+    except Exception as e:
+        logger.info('App stopped due to error.')
+        logger.error(str(e))
+    finally:
+        logger.info('App stopped.')

@@ -30,7 +30,8 @@ class SlackBot:
                                            " than 40 words. You must format your"
                                            " messages in Slack markdown.",
                  default_temp: float=0.8, chunk_size=500, chunk_overlap=50,
-                 k_similarity=5, verbose: bool=False) -> None:
+                 k_similarity=5, verbose: bool=False,
+                 log_filename: Optional[str]=None) -> None:
         """
         Initialize a new SlackBot instance.
         
@@ -41,13 +42,17 @@ class SlackBot:
         self._name = name
 
         # Setting Logger
+        logger_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         self._verbose = verbose
         level = logging.INFO #logging.DEBUG if verbose else logging.INFO
         logger = logging.getLogger(__name__)
-        logger.setLevel(level)
+        filename = log_filename
+        logging.basicConfig(filename=filename, level=level,
+                            format=logger_format)
+
         console_handler = logging.StreamHandler()
         console_handler.setLevel(level)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter(logger_format)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
