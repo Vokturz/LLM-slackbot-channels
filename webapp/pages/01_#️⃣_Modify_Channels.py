@@ -59,6 +59,8 @@ channels = channels.join(bot_channels.assign(bot_is_in_channel = True)
 if bot_only:
     channels = channels[channels['bot_is_in_channel']]
 col1.write(channels[['is_private', 'bot_is_in_channel']])
+col1.info("Bot must be shutdown in order to use this feature, otherwise it will cause bugs", icon="❕")
+
 default_info = {
         "personality": "an AI assistant inside a Slack channel",
         "instructions": "Give helpful and concise answers to the user's questions."
