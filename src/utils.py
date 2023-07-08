@@ -173,7 +173,7 @@ async def adjust_bot_temperature(bot: SlackBot,
     actual_temp = bot.get_temperature()
     temp = actual_temp
     if parsed_body['change_temp']:
-        bot.change_temperature(temperature=parsed_body['new_temp'])
+        bot.change_temperature(new_temperature=parsed_body['new_temp'])
         temp = parsed_body['new_temp']
     if parsed_body['new_temp'] == -1:
         if parsed_body["from_command"]:
@@ -291,7 +291,7 @@ async def get_llm_reply(bot: SlackBot,
 
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
-        bot.change_temperature(temperature=actual_temp)
+        bot.change_temperature(new_temperature=actual_temp)
 
     if bot.verbose:
         if qa_prompt:
