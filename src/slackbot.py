@@ -23,6 +23,7 @@ permissions_file = f'{current_directory}/../data/permissions.json'
 db_dir = f'{current_directory}/../data/db'
 
 class SlackBot:
+
     def __init__(self, name: str='SlackBot',
                  default_personality: str="an AI assistant inside a Slack channel",
                  default_instructions: str="Give helpful and concise answers to the"
@@ -35,6 +36,17 @@ class SlackBot:
         """
         Initialize a new SlackBot instance.
         
+        Args:
+            name: The name of the bot.
+            default_personality: The default personality of the bot.
+            default_instructions: The default instructions of the bot.
+            default_temp: The default temperature of the bot.
+            chunk_size: The chunk size for the text splitter.
+            chunk_overlap: The chunk overlap for the text splitter.
+            k_similarity: The number of chunks to return using the retriever.
+            verbose: Whether or not to print debug messages.
+            log_filename: The name of the log file.
+
         Raises:
             ValueError: If the SLACK_BOT_TOKEN or SLACK_APP_TOKEN 
                         environment variables could not be found.
@@ -58,7 +70,7 @@ class SlackBot:
 
         self._default_temp = default_temp
 
-        # for Retriever
+        # for retriever and text splitter
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._k_similarity = k_similarity
@@ -121,7 +133,19 @@ class SlackBot:
                        config: Dict[str, Union[float, int]] = None,
                        **kwargs) -> None:
         """
-        Initializes a language model based on the given `model_type`, `handler`, and `config`.
+        Initializes a language model based on the given `model_type` and `config`.
+
+        Args:
+            model_type: The type of language model to use, can be fakellm, openai
+                        and ctransformers.
+            max_tokens_threads: The maximum number of tokens to consider in the
+                                history of a channel thread.
+            config: The configuration for the language model.
+            kwargs: Additional keyword arguments for the language model.
+
+        Raises:
+            ValueError: If model_type is ctransformers and CTRANSFORMERS_MODEL
+                        environment variable could not be found
         """
 
         # Max number of tokens to pass in a channel thread
@@ -155,6 +179,14 @@ class SlackBot:
     def initialize_embeddings(self, model_type: str, **kwargs) -> None:
         """
         Initializes embeddings based on model type.
+
+        Args:
+            model_type: The type of embeddings to use.
+            kwargs: Additional keyword arguments for OpenAI embeddings.
+
+        Raises:
+            ValueError: If model_type is ctransformers and EMBD_MODEL
+                        environment variable could not be found
         """
         model_type = model_type.lower()
         if model_type == 'fakellm':
@@ -176,14 +208,6 @@ class SlackBot:
         response = await self.app.client.auth_test()
         self._bot_user_id = response["user_id"]
         await AsyncSocketModeHandler(self._app, self._app_token).start_async()
-
-    async def generate_response(self, query: str) -> str:
-        """"
-        Asynchronously generates a response to a given query
-        """
-        llm = self._llm
-        resp = await llm.agenerate([query])
-        return resp.generations[0][0].text
     
     @property
     def chunk_size(self):
@@ -241,34 +265,46 @@ class SlackBot:
     def get_temperature(self) -> float:
         """
         Get the temperature used in the language model.
+
+        Returns:
+            temp: The temperature used in the language model
         """
         if 'model_type' in self._llm.__dict__: # CTransformers
-            return self._llm.client.config.temperature
+            temperature = self._llm.client.config.temperature
         else: 
             try: # OpenAI
-                return self._llm.temperature
+                temperature = self._llm.temperature
             except: # FakeLLM
-                return self._default_temp
+                temperature = self._default_temp
+        return temperature
         
-    def change_temperature(self, temperature: float) -> None :
+    def change_temperature(self, new_temperature: float) -> None :
         """
         Update the temperature used in the language model.
+
+        Args:
+            new_temperature: The new temperature to use.
         """
         if 'model_type' in self._llm.__dict__: # CTransformers
-            self._llm.client.config.temperature = temperature
+            self._llm.client.config.temperature = new_temperature
         else:
             try: # OpenAI
-                self._llm.temperature = temperature 
+                self._llm.temperature = new_temperature 
             except: # FakeLLM
                 pass
         if self._verbose:
-            self._app.logger.info(f"LLM Temperature changed to {temperature}")
+            self._app.logger.info(f"LLM Temperature changed to {new_temperature}")
 
     def define_thread_retriever_db(self, channel_id: str,
                                      ts: float, docs : List[Document]
                                      ) -> None:
         """
         Defines the thread retriever docs for a given channel.
+
+        Args:
+            channel_id: The id of the channel.
+            ts: The timestamp of the thread.
+            docs: The documents to store in the vector database.
         """
         if channel_id not in self._thread_retriever_db:
             self._thread_retriever_db[channel_id] = {}
@@ -296,15 +332,34 @@ class SlackBot:
     def get_thread_retriever_db_path(self, channel_id: str, ts: float
                                   ) -> VectorStore:
         """
-        Retuns the thread retriever docs for a given channel.
+        Retuns the persisted directory of the vector database for a given
+        channel and thread.
+        
+        Args:
+            channel_id: The id of the channel.
+            ts: The timestamp of the thread.
+
+        Returns:
+            persist_directory: The persisted directory of the vector database
+                               corresponding to the channel and thread.
         """
-        return self._thread_retriever_db[channel_id][ts]
+        persist_directory = self._thread_retriever_db[channel_id][ts]
+        return persist_directory
     
     def define_channel_llm_info(self, channel_id: str,
                                 channel_bot_info: Dict[str, Union[str, float]]
                                 ) -> None:
         """
         Defines the LLM info for a given channel
+
+        Args:
+            channel_id: The id of the channel.
+            channel_bot_info: The LLM info for the channel as a dictionary with
+                              the following keys: 
+                                - personality: The personality of the bot.
+                                - instructions: The instructions for the bot.
+                                - temperature: The temperature used in the
+                                                language model.
         """
         self._channels_llm_info[channel_id] = channel_bot_info
         self._app.logger.info(f"Defined Channel {channel_id} info")
@@ -315,14 +370,32 @@ class SlackBot:
                              ) -> Dict[str, Union[str, float]]:
         """
         Get the LLM info for a given channel
+
+        Args:
+            channel_id: The id of the channel.
+
+        Returns:
+            channel_llm_info: The LLM info for the channel as a dictionary with
+                              the following keys: 
+                                - personality: The personality of the bot.
+                                - instructions: The instructions for the bot.
+                                - temperature: The temperature used in the
+                                                language model.
         """
+
+        # if is not defined
         if channel_id not in self._channels_llm_info:
             self.define_channel_llm_info(channel_id, self._default_llm_info) 
-        return self._channels_llm_info[channel_id]
+
+        channel_llm_info = self._channels_llm_info[channel_id]
+        return channel_llm_info
     
-    def define_allowed_users(self, users_list: List) -> None:
+    def define_allowed_users(self, users_list: List[str]) -> None:
         """
-        Define the allowed users fot the bot
+        Define the list of allowed users who can use the bot.
+
+        Args:
+            users_list: A list of slack users.
         """
         self._allowed_users["users"] = users_list
         self._app.logger.info(f"Defined allowed users: {users_list}")
@@ -333,6 +406,12 @@ class SlackBot:
     def check_permissions(self, func: Callable[..., None]) -> Callable[..., None]:
         """
         Decorator that checks if the user has permission to use the command.
+
+        Args:
+            func: The function to be decorated.
+
+        Returns:
+            wrapper: The wrapper function
         """
         
         import functools
