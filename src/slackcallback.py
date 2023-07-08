@@ -9,6 +9,15 @@ nest_asyncio.apply()
 
 class SlackAsyncCallbackHandler(AsyncCallbackHandler):
     def __init__(self, bot: SlackBot, channel_id: str, ts: float, inital_message : str):
+        """"
+        Initialize the SlackAsyncCallbackHandler
+
+        Args:
+            bot: A SlackBot object.
+            channel_id: The channel id of the current message.
+            ts: The timestamp of the current message.
+            inital_message: The initial message to write.
+        """
         self.bot = bot
         self.client = bot.app.client
         self.channel_id = channel_id
@@ -17,17 +26,15 @@ class SlackAsyncCallbackHandler(AsyncCallbackHandler):
         self.message = inital_message
         self.update_throttle = SimpleThrottle(self._update_message_in_slack, self.update_delay)
 
-    async def _update_message_in_slack(self):
+    async def _update_message_in_slack(self) -> None:
+        """Update the message in Slack."""
         await self.client.chat_update(
             channel=self.channel_id, ts=self.ts, text=self.message + f"... :hourglass_flowing_sand:"
         )
         
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         self.message += token
-        self.client.logger.info(self.message)
-        await self.client.chat_update(
-            channel=self.channel_id, ts=self.ts, text=self.message + f"... :hourglass_flowing_sand:"
-        )
+        await self.update_throttle.call()
 
     async def on_chain_start(
               self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
@@ -42,6 +49,15 @@ class SlackAsyncCallbackHandler(AsyncCallbackHandler):
 class SlackCallbackHandler(BaseCallbackHandler):
     def __init__(self, bot: SlackBot, channel_id: str,
                   ts: float, inital_message: str):
+        """"
+        Initialize the SlackCallbackHandler
+
+        Args:
+            bot: A SlackBot object.
+            channel_id: The channel id of the current message.
+            ts: The timestamp of the current message.
+            inital_message: The initial message to write.
+        """
         self.bot = bot
         self.client = bot.app.client
         self.channel_id = channel_id
@@ -51,6 +67,7 @@ class SlackCallbackHandler(BaseCallbackHandler):
         self.update_throttle = SimpleThrottle(self._update_message_in_slack, self.update_delay)
 
     async def _update_message_in_slack(self):
+        """Update the message in Slack."""
         await self.client.chat_update(
             channel=self.channel_id, ts=self.ts, text=self.message + f"... :hourglass_flowing_sand:"
         )

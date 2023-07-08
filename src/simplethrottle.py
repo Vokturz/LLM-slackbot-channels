@@ -2,6 +2,7 @@ import time
 import asyncio
 import nest_asyncio
 nest_asyncio.apply()
+
 class SimpleThrottle:
     def __init__(self, coro, delay):
         self.coro = coro
