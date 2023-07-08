@@ -3,7 +3,7 @@ import re
 import time
 import asyncio
 from typing import (Dict, Optional, Any, Union, Tuple, List, Set)
-from slack_bolt import (Say, Respond)
+from slack_bolt import Say
 from .slackbot import SlackBot
 from langchain import PromptTemplate, LLMChain
 from langchain.chains import ConversationalRetrievalChain
