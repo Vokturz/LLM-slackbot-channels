@@ -20,7 +20,23 @@ def parse_format_body(body: Dict[str, Any],
                       bot_user_id: Optional[bool]=None
                       ) -> Dict[str, Union[str, float]]:
     """
-    Parses a message body and extracts relevant information in a dictionary format.
+    Parses a message body and extracts relevant information as a dictionary.
+
+    Args:
+        body: The message body from the Slack API.
+        bot_user_id: The bot user id.
+
+    Returns:
+        res: A dictionary containing the relevant information from the body
+             with the following keys.
+             - query: The text of the message.
+             - user_id: The user id of the user who sent the message.
+             - channel_id: The channel id of the message.
+             - to_all: Whether the response must be sent to all channel members
+                       or just the user who sent the message.
+             - change_temp: Whether the default temperature of the bot should be
+                             modified.
+             - from_command: Whether the message comes from a command or an event.
     """
     to_all = False
     change_temp = False
@@ -74,6 +90,21 @@ async def prepare_messages_history(bot: SlackBot,
                                               str]:
     """
     If it is a thread, prepare the message history to be sent to the bot.
+
+    Args:
+        bot: The Slackbot object.
+        parsed_body: The relevant information from the body obtained from
+                     parse_format_body.
+        to_chain: A dictionary containing the varoables to be used in the chain.
+        qa_prompt: The QA PromptTemplate object.
+    
+    Returns:
+        to_chain: A dictionary containing the variables to be used in the chain.
+                  The chat history and list of users in the conversartion are
+                  added to this dictionary.
+        thread_ts: The thread timestamp.
+        qa_prompt: The QA PromptTemplate object partially formatted.
+        warning_msg: A warning message about the tokens limit.
     """
     if 'thread_ts' not in parsed_body.keys():
         to_chain['query'] = parsed_body['query']
@@ -97,7 +128,18 @@ async def send_initial_message(bot: SlackBot,
                                parsed_body: Dict[str, Union[str, float]],
                                thread_ts: Optional[float]) -> Optional[float]:
     """
-    Send a initial message "bot is thinking.."
+    Send a initial message: "bot is thinking.."
+
+    Args:
+        bot: The Slackbot object.
+        parsed_body: The relevant information from the body obtained from
+                     parse_format_body.
+        thread_ts: The thread timestamp.
+
+    Returns:
+        initial_ts: The timestamp of the initial message only if to_all
+                    is True in parsed_body.
+
     """
     if parsed_body['to_all']:
         init_msg = f"{bot.name} is thinking.. :hourglass_flowing_sand:"
@@ -117,7 +159,16 @@ async def adjust_bot_temperature(bot: SlackBot,
                                  parsed_body: Dict[str, Union[str, float]]
                                  ) -> float:
     """
-    Set bot temperature according to parsed_body
+    Updates bot temperature according to parsed_body to generate a response
+    from the LLM. 
+
+    Args:
+        bot: The Slackbot object.
+        parsed_body: The relevant information from the body obtained from
+                     parse_format_body.
+
+    Returns:
+        temp: The new temperature of the bot
     """
     actual_temp = bot.get_temperature()
     temp = actual_temp
@@ -142,6 +193,19 @@ async def get_llm_reply(bot: SlackBot,
     """
     Generate a response using the bot's language model, given a prompt and
     a parsed request data.
+
+    Args:
+        bot: The Slackbot object.
+        prompt: A PromptTemplate object containing the LLM prompt to be used.
+        parsed_body: The relevant information from the body obtained from
+                     parse_format_body.
+        first_ts: The timestamp of the first message sent in the conversation.
+                  Used only in a QA thread.
+        qa_prompt: The QA PromptTemplate object.
+
+    Returns:
+        response: The generated response from the LLM.
+        initial_ts: The timestamp of the initial message sent by the bot.
     """
     channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
     actual_temp = channel_llm_info['temperature']
@@ -245,6 +309,14 @@ async def extract_first_message_thread(bot: SlackBot,
                                         ) -> Dict[str, Any]:
     """
     Extracts the first message from a given channel and thread timestamp
+
+    Args:
+        bot: The Slackbot object.
+        channel_id: The channel id.
+        thread_ts: The thread timestamp.
+
+    Returns:
+        message: The first message from the given channel and thread timestamp
     """
     client = bot.app.client
     result = await client.conversations_replies(channel=channel_id, ts=thread_ts)    
@@ -255,7 +327,22 @@ async def extract_thread_conversation(bot: SlackBot, channel_id:str,
                                         thread_ts: float
                                         ) -> Tuple[List[str], Set[str]]:
     """
-    Extracts a conversation thread from a given channel and thread timestamp
+    Extracts a conversation thread from a given channel and thread timestamp.
+    The conversation is cleaned removing the bot name and verbose messages.
+    It has the following format:
+        <@user_id1> : user1 message mentioning the bot
+        AI : bot response
+        ..
+
+    Args:
+        bot: The Slackbot object.
+        channel_id: The channel id.
+        thread_ts: The thread timestamp.
+
+    Returns:
+        message_history: Thwe list of messages in the conversation
+        users: The set of users in the conversation
+
     """
     client = bot.app.client
     bot_user_id = bot.bot_user_id
@@ -291,6 +378,18 @@ def custom_token_memory(bot: SlackBot,
     """
     Remove first messages if the thread exceed the max tokens
     This follow the ConversationTokenBufferMemory approach from langchain
+
+    Args:
+        bot: The Slackbot object.
+        messages_history: The list of messages in a conversation
+
+    Returns:
+        messages_history: The list of messages in a conversation. If the number
+                          of tokens of the conversation exceeds the tokens limit 
+                          (max_tokens_threads) of the bot, then the first N 
+                          messages are removed.
+        warning_msg: A warning message about the tokens limit.
+
     """
     warning_msg = ""
 
