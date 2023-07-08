@@ -1,8 +1,9 @@
-# This has been copied from https://github.com/imartinez/privateGPT/blob/main/ingest.py
-import os
-import glob
+# The first two functions has been copied from
+# https://github.com/imartinez/privateGPT/blob/main/ingest.py
+
 from typing import List, Optional
 from dotenv import load_dotenv
+from typing import (Dict, Tuple, Any)
 
 from langchain.document_loaders import (
     CSVLoader,
@@ -14,11 +15,10 @@ from langchain.document_loaders import (
 )
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.docstore.document import Document
-#from constants import CHROMA_SETTINGS
 
+from langchain.docstore.document import Document
+import requests
+from pathlib import Path
 
 load_dotenv()
 
@@ -77,3 +77,47 @@ def process_documents(documents: List[Document],
                                                    )
     texts = text_splitter.split_documents(documents)
     return texts
+
+def process_uploaded_files(files: Dict[str, Any], 
+                           bot_token: str,
+                           chunk_size: int, chunk_overlap: int,
+                          extra_separators: List[str], 
+                            ) -> Tuple[List[str], List[Document]]:
+    """
+    Process the files uploaded by the user. All files are splitted using the
+    functions from the ingest module and the bot configuration. This is then
+    used to create a QA thread.
+
+
+    Args:
+        bot_token: The bot token.
+        files: The files uploaded by the user as a Slack response.
+        chunk_size: The chunk size for the text splitter.
+        chunk_overlap: The chunk overlap for the text splitter.
+        extra_separators: The extra separators to use.
+
+    Returns:
+        file_name_list: A list of the file names.
+        texts: The documents split into chunks.
+    """
+    all_texts = []
+    file_name_list = []
+    for _file in files:
+        url = _file['url_private_download']
+        file_name = _file['name'] 
+        pretty_type = _file['pretty_type']
+        doc_list = []
+        if '.'+file_name.split('.')[-1] in LOADER_MAPPING.keys():
+            resp = requests.get(url, headers={'Authorization':
+                                                'Bearer %s' % bot_token})
+            save_file = Path(f'data/tmp/{file_name}')
+            save_file.write_bytes(resp.content)
+            doc_list.append(load_single_document(f'data/tmp/{file_name}',
+                                                        pretty_type))
+            save_file.unlink()
+            file_name_list.append(file_name)
+        texts = process_documents(doc_list, chunk_size=chunk_size,
+                                  chunk_overlap=chunk_overlap,
+                                  extra_separators=extra_separators)  
+        all_texts.extend(texts) 
+    return file_name_list, all_texts

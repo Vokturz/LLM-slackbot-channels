@@ -2,14 +2,13 @@ from . import prompts
 from .slackbot import SlackBot
 from .utils import (parse_format_body, get_llm_reply,
                     extract_first_message_thread)
+from .ingest import process_uploaded_files
 import json
 import os
 import re
-import time
 import asyncio
 from typing import (Dict, Any)
 from langchain.prompts import PromptTemplate
-
 from slack_bolt import (Say, Respond, Ack)
 
 # Get the directory path of the current script
@@ -349,30 +348,14 @@ def create_handlers(bot: SlackBot) -> None:
             if "files" in body['event'].keys():
                 extra_separators = re.findall(r'!sep=(\S+)', parsed_body["query"])
                 files =  body['event']['files']
-                file_name_list = []
-                for _file in files:
-                    import requests
-                    from pathlib import Path
-                    from .ingest import (load_single_document, process_documents,
-                                         LOADER_MAPPING)
-                    url = _file['url_private_download']
-                    file_name = _file['name'] 
-                    pretty_type = _file['pretty_type']
-                    doc_list = []
-                    if '.'+file_name.split('.')[-1] in LOADER_MAPPING.keys():
-                        resp = requests.get(url, headers={'Authorization':
-                                                          'Bearer %s' % bot.bot_token})
-                        save_file = Path(f'data/tmp/{file_name}')
-                        save_file.write_bytes(resp.content)
-                        file_name_list.append(file_name)
-                        doc_list.append(load_single_document(f'data/tmp/{file_name}', pretty_type))
-                        save_file.unlink()
-                    texts = process_documents(doc_list, chunk_size=bot.chunk_size,
-                                              chunk_overlap=bot.chunk_overlap,
-                                              extra_separators=extra_separators)   
-                    bot.define_thread_retriever_db(channel_id, body['event']['ts'], texts)
+                msg_timestamp = body['event']['ts']
+                file_name_list, texts = process_uploaded_files(files, bot_token=bot.bot_token,
+                                                               chunk_size=bot.chunk_size,
+                                                               chunk_overlap=bot.chunk_overlap,
+                                                               extra_separators=extra_separators)
+                bot.define_thread_retriever_db(channel_id, msg_timestamp, texts)
                 await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
-                          thread_ts=body['event']['ts'])
+                          thread_ts=msg_timestamp)
             else:
                 # Send message instructing users to use the proper command
                 # or use a thread for discussion
