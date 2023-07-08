@@ -1,7 +1,7 @@
 # This has been copied from https://github.com/imartinez/privateGPT/blob/main/ingest.py
 import os
 import glob
-from typing import List
+from typing import List, Optional
 from dotenv import load_dotenv
 
 from langchain.document_loaders import (
@@ -34,7 +34,17 @@ LOADER_MAPPING = {
     ".txt": (TextLoader, {"encoding": "utf8"}),
 }
 
-def load_single_document(file_path: str, pretty_type: str) -> List[Document]:
+def load_single_document(file_path: str, pretty_type: str) -> Optional[Document]:
+    """
+    Load a single document from a file
+    
+    Args:
+        file_path: The path to the file to load.
+        pretty_type: The type of document to load.
+
+    Returns:
+        doc: The loaded document.
+    """
     ext = "." + file_path.rsplit(".", 1)[-1]
     if ext in LOADER_MAPPING:
         loader_class, loader_args = LOADER_MAPPING[ext]
@@ -49,7 +59,16 @@ def process_documents(documents: List[Document],
                       chunk_size: int, chunk_overlap: int,
                       extra_separators: List[str]) -> List[Document]:
     """
-    Load documents and split in chunks
+    Load documents and split them into chunks.
+
+    Args:
+        documents: The documents to load.
+        chunk_size: The chunk size fo the text splitter.
+        chunk_overlap: The chunk overlap for the text splitter.
+        extra_separators: The extra separators to use.
+
+    Returns:
+        texts: The documents split into chunks.
     """
     separators = extra_separators + ["\n\n", "\n", " ", ""]
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size,
