@@ -25,7 +25,7 @@
 				"text": "Modify which users can use the bot"
 			},
 			"accessory": {
-				"action_id": "permissions_select_user",
+				"action_id": "unused_action",
 				"type": "multi_users_select",
 				"initial_users": [
 					"U12345678"
