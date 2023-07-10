@@ -303,17 +303,19 @@ async def get_llm_reply(bot: SlackBot,
     return response, initial_ts
 
 
-async def extract_first_message_thread(bot: SlackBot,
+async def extract_message_from_thread(bot: SlackBot,
                                        channel_id:str,
-                                       thread_ts: float
+                                       thread_ts: float,
+                                       position: int=0
                                         ) -> Dict[str, Any]:
     """
-    Extracts the first message from a given channel and thread timestamp
+    Extracts a message from a given channel and thread timestamp
 
     Args:
         bot: The Slackbot object.
         channel_id: The channel id.
         thread_ts: The thread timestamp.
+        position: The position of the message
 
     Returns:
         message: The first message from the given channel and thread timestamp
@@ -321,7 +323,7 @@ async def extract_first_message_thread(bot: SlackBot,
     client = bot.app.client
     result = await client.conversations_replies(channel=channel_id, ts=thread_ts)    
     messages = result['messages']
-    return messages[0]
+    return messages[position]
 
 async def extract_thread_conversation(bot: SlackBot, channel_id:str,
                                         thread_ts: float
