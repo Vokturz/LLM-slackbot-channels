@@ -1,0 +1,85 @@
+{
+	"title": {
+		"type": "plain_text",
+		"text": "Upload file(s)"
+	},
+	"submit": {
+		"type": "plain_text",
+		"text": "Upload"
+	},
+	"blocks": [
+		{
+			"type": "input",
+			"block_id": "extra_context",
+			"element": {
+				"type": "plain_text_input",
+				"action_id" : "extra_context",
+				"initial_value": "extra_context"
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "The files are about",
+				"emoji": true
+			},
+			"hint": {
+				"type": "plain_text",
+				"text": "Extra context about files. It improves the search over the documents"
+			}
+		},
+		{
+			"type": "input",
+			"block_id": "extra_separators",
+			"optional": true,
+			"element": {
+				"type": "plain_text_input",
+				"action_id": "extra_separators"
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "Extra separators",
+				"emoji": true
+			},
+			"hint": {
+				"type": "plain_text",
+				"text": "Strings to split documents. Separate each separator by \";\""
+			}
+		},
+		{
+			"type": "section",
+			"block_id": "radio_buttons",
+			"text": {
+				"type": "plain_text",
+				"text": " "
+			},
+			"accessory": {
+				"type": "radio_buttons",
+				"action_id": "unused_action",
+				"initial_option": {
+					"value": "to_qa_thread",
+					"text": {
+						"type": "plain_text",
+						"text": "Create a QA thread"
+					}
+				},
+				"options": [
+					{
+						"value": "to_qa_thread",
+						"text": {
+							"type": "plain_text",
+							"text": "Create a QA thread"
+						}
+					},
+					{
+						"value": "to_channel",
+						"text": {
+							"type": "plain_text",
+							"text": "Add files to channel"
+						}
+					}
+				]
+			}
+		}
+	],
+	"type": "modal",
+	"callback_id": "upload_files"
+}
