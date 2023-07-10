@@ -3,7 +3,7 @@
 
 from typing import List, Optional
 from dotenv import load_dotenv
-from typing import (Dict, Tuple, Any)
+from typing import (Dict, Any)
 
 from langchain.document_loaders import (
     CSVLoader,
@@ -81,8 +81,8 @@ def process_documents(documents: List[Document],
 def process_uploaded_files(files: Dict[str, Any], 
                            bot_token: str,
                            chunk_size: int, chunk_overlap: int,
-                          extra_separators: List[str], 
-                            ) -> Tuple[List[str], List[Document]]:
+                           extra_separators: List[str], 
+                            ) -> List[Document]:
     """
     Process the files uploaded by the user. All files are splitted using the
     functions from the ingest module and the bot configuration. This is then
@@ -97,11 +97,9 @@ def process_uploaded_files(files: Dict[str, Any],
         extra_separators: The extra separators to use.
 
     Returns:
-        file_name_list: A list of the file names.
         texts: The documents split into chunks.
     """
     all_texts = []
-    file_name_list = []
     for _file in files:
         url = _file['url_private_download']
         file_name = _file['name'] 
@@ -115,9 +113,8 @@ def process_uploaded_files(files: Dict[str, Any],
             doc_list.append(load_single_document(f'data/tmp/{file_name}',
                                                         pretty_type))
             save_file.unlink()
-            file_name_list.append(file_name)
         texts = process_documents(doc_list, chunk_size=chunk_size,
                                   chunk_overlap=chunk_overlap,
                                   extra_separators=extra_separators)  
         all_texts.extend(texts) 
-    return file_name_list, all_texts
+    return all_texts
