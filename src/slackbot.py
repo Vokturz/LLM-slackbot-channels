@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import asyncio
 from typing import (Callable, Dict, Optional, Union, Tuple, List, Any, Set)
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
@@ -126,6 +127,8 @@ class SlackBot:
                 self._allowed_users = allowed_users
         else:
             self._allowed_users = {"users" : ["@all"]}
+        
+        self._stored_files = {}
 
             
     def initialize_llm(self, model_type: str,
@@ -296,7 +299,9 @@ class SlackBot:
             self._app.logger.info(f"LLM Temperature changed to {new_temperature}")
 
     def define_thread_retriever_db(self, channel_id: str,
-                                     ts: float, docs : List[Document]
+                                     ts: float, docs : List[Document],
+                                     file_name_list: List[str],
+                                     extra_context: str
                                      ) -> None:
         """
         Defines the thread retriever docs for a given channel.
@@ -305,6 +310,8 @@ class SlackBot:
             channel_id: The id of the channel.
             ts: The timestamp of the thread.
             docs: The documents to store in the vector database.
+            file_name_list: The file names of the documents.
+            extra_context: Any extra context to add to the QA thread
         """
         if channel_id not in self._thread_retriever_db:
             self._thread_retriever_db[channel_id] = {}
@@ -313,7 +320,10 @@ class SlackBot:
         persist_directory = f"{db_dir}/{channel_id}/{ts}"
         if ts not in self._thread_retriever_db[channel_id]:
             os.mkdir(persist_directory)
-            
+            msg = "Creating DB for channel's thread.."
+            init_msg = asyncio.run(self._app.client.chat_postMessage(channel=channel_id,
+                                                    thread_ts=ts,
+                                                    text=msg))
             db = VStore.from_documents(docs, embedding=self._embeddings,
                                        persist_directory=persist_directory,
                                        client_settings=Settings(
@@ -327,7 +337,11 @@ class SlackBot:
             db = None
             self._thread_retriever_db[channel_id][ts] = persist_directory
             self._app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
-
+            msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
+            msg += f" The files are about {extra_context}"
+            asyncio.run(self._app.client.chat_update(channel=channel_id,
+                                                     ts=init_msg['ts'],
+                                                     text=msg))
 
     def get_thread_retriever_db_path(self, channel_id: str, ts: float
                                   ) -> VectorStore:
@@ -402,6 +416,29 @@ class SlackBot:
         with open(permissions_file, 'w') as f:
                 json.dump(self._allowed_users, f, ensure_ascii=False, indent=4)
 
+
+    def get_stored_files_dict(self, timestamp: float) -> Dict[str, Any]:
+        """
+        Get the stored file dictionary for a given timestamp.
+
+        Args:
+            timestamp: The timestamp of when the file was uploaded.
+
+        Returns
+            files_dict: The file dictionary
+        """
+        files_dict = self._stored_files[timestamp]
+        return files_dict
+
+    def store_files_dict(self, timestamp: float, files_dict: Dict[str, Any]) -> None:
+        """
+        Store a files dictionary from Slack.
+
+        Args:
+            timestamp: The timestamp of when the file was uploaded.
+            files_dict: The files dictionary to store
+        """
+        self._stored_files[timestamp] = files_dict
     
     def check_permissions(self, func: Callable[..., None]) -> Callable[..., None]:
         """

@@ -1,7 +1,7 @@
 from . import prompts
 from .slackbot import SlackBot
 from .utils import (parse_format_body, get_llm_reply,
-                    extract_first_message_thread)
+                    extract_message_from_thread)
 from .ingest import process_uploaded_files
 import json
 import os
@@ -10,6 +10,7 @@ import asyncio
 from typing import (Dict, Any)
 from langchain.prompts import PromptTemplate
 from slack_bolt import (Say, Respond, Ack)
+import threading
 
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -262,11 +263,7 @@ def create_handlers(bot: SlackBot) -> None:
                                                     text=msg)
         bot.define_allowed_users(allowed_users)
 
-    @bot.app.action("permissions_select_user")
-    async def handle_perimissions_select_user(ack: Ack):
-        " Just to pass action of selecting an user"
-        await ack()
-        return
+
         
     @bot.app.event("app_mention")
     @bot.check_permissions
@@ -306,8 +303,8 @@ def create_handlers(bot: SlackBot) -> None:
         except:
             thread_ts = None
         if thread_ts:
-            first_message = await extract_first_message_thread(bot, channel_id,
-                                                                thread_ts)
+            first_message = await extract_message_from_thread(bot, channel_id,
+                                                             thread_ts, position=0)
            # Generate the prompt
             if 'files' not in first_message:
                 # Is not a QA thread
@@ -321,14 +318,14 @@ def create_handlers(bot: SlackBot) -> None:
                 # Is a QA thread
                 prompt = PromptTemplate.from_template(template=prompts.CONDENSE_QUESTION_PROMPT)
                 qa_prompt = PromptTemplate.from_template(template=prompts.QA_PROMPT)
-                extra_context = re.sub(r'!sep=\S+', '',first_message['text'])
-                extra_context = extra_context.replace('<@'+bot.bot_user_id+'>', '')
-                extra_context = re.sub(r'\s+', ' ', extra_context).strip()
-                if len(extra_context)<3:
-                    extra_context = 'files'
+
+                 # Bot message as extra context
+                second_message = await extract_message_from_thread(bot, channel_id,
+                                                                 thread_ts, position=1)
+                extra_context = second_message['text']
                 qa_prompt = qa_prompt.partial(extra_context=extra_context)
                 if bot.verbose:
-                    bot.app.logger.info(f"Asking RetrievalQA thread about"
+                    bot.app.logger.info(f"Asking RetrievalQA. "
                                         f" {extra_context}:"
                                         f" {channel_id}/{first_message['ts']}:"
                                         f" {parsed_body['query']}")
@@ -346,23 +343,149 @@ def create_handlers(bot: SlackBot) -> None:
                 )
         else:
             if "files" in body['event'].keys():
-                extra_separators = re.findall(r'!sep=(\S+)', parsed_body["query"])
                 files =  body['event']['files']
                 msg_timestamp = body['event']['ts']
-                file_name_list, texts = process_uploaded_files(files, bot_token=bot.bot_token,
-                                                               chunk_size=bot.chunk_size,
-                                                               chunk_overlap=bot.chunk_overlap,
-                                                               extra_separators=extra_separators)
-                bot.define_thread_retriever_db(channel_id, msg_timestamp, texts)
-                await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
-                          thread_ts=msg_timestamp)
+
+                # store the file dict temporally
+                bot.store_files_dict(msg_timestamp, files)
+
+                # Sent a temporary message
+                await bot.app.client.chat_postEphemeral(
+                    user=body['event']['user'],
+                        channel=channel_id,
+                        text="upload files",
+                        blocks=[
+                            {
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": "Hey! looks like you have uploaded some files."
+                                            " Do you want to interact with them?"
+                                },
+                                "accessory": {
+                                    "type": "button",
+                                    "text": {
+                                        "type": "plain_text",
+                                        "text": "Yes"
+                                    },
+                                    "action_id": "files_button",
+                                    "value" : msg_timestamp
+                                }
+                            }
+                        ]
+                    )
+
             else:
                 # Send message instructing users to use the proper command
                 # or use a thread for discussion
                 await say("If you want to ask something, use command */ask*."
                         " If you want to include me on a discussion"
                         ", you have to mention me in a _thread_.")
+                
+            
+    @bot.app.action("files_button")
+    async def open_file_uploaded_modal(ack, body, respond):
+        """
+        Handle the files_button action
+        """
+        await ack()
+        channel_id = body['container']['channel_id']
+        msg_timestamp = body['actions'][0]['value']
+        files = bot.get_stored_files_dict(msg_timestamp)
+        first_message = await extract_message_from_thread(bot, channel_id,
+                                                          msg_timestamp,
+                                                          position=0)
+        extra_separators = re.findall(r'!sep=(\S+)', first_message['text'])
+        extra_context = re.sub(r'!sep=\S+', '',first_message['text'])
+        extra_context = extra_context.replace('<@'+bot.bot_user_id+'>', '')
+        extra_context = re.sub(r'\s+', ' ', extra_context).strip()
+        
+        #Load upload_files_template.json
+        with open(f'{current_directory}/payloads/upload_files_template.json', 'r') as f:
+            view = json.load(f)
 
+        files_title_list = [f["title"] for f in files]
+        if not extra_context:
+            extra_context = ';'.join(files_title_list)
+
+        # set initial values
+        view["blocks"][0]["element"]["initial_value"] = extra_context
+        view["blocks"][1]["element"]["initial_value"] = ';'.join(extra_separators)
+
+        # add to channel not implemented yet
+        view['blocks'][2]['accessory']['options'].pop()
+
+        # Include channel_id in private_metadata
+        view["private_metadata"] =  json.dumps({"channel_id": channel_id,
+                                                "ts": msg_timestamp})
+        trigger_id = body["trigger_id"]
+        await bot.app.client.views_open(trigger_id=trigger_id, view=view)
+
+        # Remove ephemeral message
+        await respond({
+                    'text': '',
+                    'replace_original': True,
+                    'delete_original': True
+                })
+
+    @bot.app.view('upload_files')
+    async def handle_upload_files_view(ack: Ack,
+                                       view: Dict[str, Any]) -> None:
+        """
+        Handle the upload files view.
+        """
+        await ack()
+
+        extra_context = (view['state']['values']
+                         ['extra_context']['extra_context']
+                         ['value'])
+        extra_separators = (view['state']['values']
+                            ['extra_separators']['extra_separators']
+                            ['value'])
+        if extra_separators:
+            extra_separators = extra_separators.split(';')
+        else:
+            extra_separators = []
+        selected_option = (view['state']['values']
+                           ['radio_buttons']['unused_action']
+                           ['selected_option']['value'])
+        private_metadata = json.loads(view["private_metadata"])
+        channel_id = private_metadata["channel_id"]
+        msg_timestamp = private_metadata['ts']
+
+        # get temp files dict
+        files = bot.get_stored_files_dict(msg_timestamp)
+
+        file_name_list = [f["name"] for f in files]
+
+        if selected_option == 'to_channel':
+            bot.app.logger.info('Files uploaded to channel')
+            pass
+
+        else:
+            bot.app.logger.info('Creating a QA thread')
+                 
+            texts = process_uploaded_files(files, bot_token=bot.bot_token,
+                                           chunk_size=bot.chunk_size,
+                                           chunk_overlap=bot.chunk_overlap,
+                                           extra_separators=extra_separators)
+            # remove temp files dict
+            bot.store_files_dict(msg_timestamp, None)
+
+            thread = threading.Thread(target=bot.define_thread_retriever_db,
+                                      args=(channel_id, msg_timestamp, texts,
+                                            file_name_list, extra_context))
+            thread.start()
+            # bot.define_thread_retriever_db(channel_id, msg_timestamp, texts)
+            # await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
+            #           thread_ts=msg_timestamp, channel=channel_id)
+
+    @bot.app.action("unused_action")
+    async def handle_unused(ack: Ack):
+        """Just to pass unused_action"""
+        await ack()
+        return
+    
     return {"handle_ask": handle_ask,
             "handle_modify_bot": handle_modify_bot,
             "handle_modify_bot_view": handle_modify_bot_view,
