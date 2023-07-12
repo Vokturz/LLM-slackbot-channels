@@ -1,5 +1,5 @@
 chromadb==0.3.25
-langchain==0.0.205
+langchain==0.0.231
 python-dotenv==1.0.0
 slack_bolt==1.18.0
 tiktoken==0.4.0
