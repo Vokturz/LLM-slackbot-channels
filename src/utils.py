@@ -39,56 +39,41 @@ def parse_format_body(body: Dict[str, Any],
                              modified.
              - from_command: Whether the message comes from a command or an event.
     """
-    to_all = False
-    change_temp = False
-    try: # Message is a command
-        user_id = body["user_id"]
-        channel_id = body['channel_id']
-        from_command = True
-    except: # Message is an event
-        user_id = body["user"]
-        channel_id = body["channel"]
-        from_command = False
+    # if XX_id comes from command, otherwise it comes from event
+    user_id = body.get("user_id", body.get("user"))
+    channel_id = body.get("channel_id", body.get("channel"))
     query = body["text"]
 
     # Check if message includes !all
-    if '!all' in query: 
-        query = query.replace('!all', '').strip()
-        to_all = True
+    to_all = '!all' in query
+    query = query.replace('!all', '') if to_all else query
     
-    # Check if message includes !temp
-    new_temp = re.search(r'!temp=([\d.]+)', query)
-    if new_temp:
-        try:
-            new_temp = float(new_temp.group(1))
-            assert 0<=new_temp<=1
-            change_temp = True
-        except:
-            new_temp = -1
-            change_temp = False
-        query = re.sub(r'!temp=([\d.]+)', '', query).strip()
+    # Check if message includes !temp adn extract it
+    new_temp_match = re.search(r'!temp=([\d.]+)', query)
+    new_temp = float(new_temp_match.group(1)) if new_temp_match else -1
+    # check if temp is valid
+    change_temp = 0 <= new_temp <= 1
+    query = re.sub(r'!temp=([\d.]+)', '', query) if new_temp_match else query
 
     # Remove bot user id
-    if bot_user_id:
-        query = query.replace(f'<@{bot_user_id}>', '')
+    query = query.replace(f'<@{bot_user_id}>', '') if bot_user_id else query
 
-    res = {'query' : query,
+    res = {'query' : query.replace('  ', ' ').strip(),
            'user_id' : user_id,
            'channel_id' : channel_id,
-           'new_temp' : new_temp,
+           'new_temp' : new_temp if change_temp else -1,
            'to_all' : to_all,
            'change_temp' : change_temp,
-           'from_command' : from_command}
+           'from_command' : "user_id" in body}
     return res
 
-async def prepare_messages_history(bot: SlackBot,
-                                   parsed_body: Dict[str, Union[str, float]],
-                                   to_chain: Dict[str, Any],
-                                   qa_prompt : Optional[PromptTemplate]
-                                   ) -> Tuple[Dict[str, Any],
-                                              Optional[float],
-                                              Optional[PromptTemplate],
-                                              str]:
+async def prepare_messages_history(
+        bot: SlackBot,
+        parsed_body: Dict[str, Union[str, float]],
+        to_chain: Dict[str, Any],
+        qa_prompt : Optional[PromptTemplate]
+        ) -> Tuple[Dict[str, Any], Optional[float],
+                   Optional[PromptTemplate],str]:
     """
     If it is a thread, prepare the message history to be sent to the bot.
 
@@ -124,7 +109,7 @@ async def prepare_messages_history(bot: SlackBot,
         if qa_prompt:
             qa_prompt = qa_prompt.partial(**to_chain)
             messages_history = messages_history[2:-1]
-        to_chain['chat_history'] = ('\n'.join(messages_history).replace('\n\n', '\n'))
+        to_chain['chat_history'] = '\n'.join(messages_history).replace('\n\n', '\n')
         to_chain['users'] = ' '.join(list(users))
     return to_chain, thread_ts, qa_prompt, warning_msg
 
@@ -145,17 +130,17 @@ async def send_initial_message(bot: SlackBot,
                     is True in parsed_body.
 
     """
-    if parsed_body['to_all']:
-        init_msg = f"{bot.name} is thinking.. :hourglass_flowing_sand:"
-        if parsed_body['from_command']:
-            init_msg = (f"*<@{parsed_body['user_id']}> asked*:"
-                        f" {parsed_body['query']}\n" + init_msg)
-        client = bot.app.client
-        msg = await client.chat_postMessage(channel=parsed_body['channel_id'],
-                                      text=init_msg, thread_ts=thread_ts)
-        initial_ts = msg['ts']
-    else:
-        initial_ts = None
+    if not parsed_body['to_all']:
+        return None
+    
+    init_msg = f"{bot.name} is thinking.. :hourglass_flowing_sand:"
+    if parsed_body['from_command']:
+        init_msg = (f"*<@{parsed_body['user_id']}> asked*:"
+                    f" {parsed_body['query']}\n" + init_msg)
+    client = bot.app.client
+    initial_ts = await client.chat_postMessage(channel=parsed_body['channel_id'],
+                                    text=init_msg, thread_ts=thread_ts)['ts']
+
     return initial_ts
 
 def get_temperature(llm: LLM) -> float:
@@ -212,20 +197,22 @@ async def adjust_llm_temperature(bot,
     if parsed_body['change_temp']:
         change_temperature(llm, new_temperature=parsed_body['new_temp'])
         temp = parsed_body['new_temp']
-    if parsed_body['new_temp'] == -1:
-        if parsed_body["from_command"]:
-            client = bot.app.client
-            warning_msg = (f"`!temp` only accepts values between 0 and 1."
-                           f" Using current value of `{actual_temp}`")
-            await client.chat_postEphemeral(channel=parsed_body['channel_id'],
-                                            text=warning_msg)
+    else:
+        if parsed_body['new_temp'] == -1:
+            if parsed_body["from_command"]:
+                client = bot.app.client
+                warning_msg = (f"`!temp` only accepts values between 0 and 1."
+                            f" Using current value of `{actual_temp}`")
+                await client.chat_postEphemeral(channel=parsed_body['channel_id'],
+                                                text=warning_msg,
+                                                user=parsed_body['user_id'])
     return temp
 
 async def get_llm_reply(bot: SlackBot, 
                         prompt: PromptTemplate, 
                         parsed_body: Dict[str, Union[str, float]],
-                        first_ts : Optional[float]=None,
-                        qa_prompt : Optional[PromptTemplate]=None
+                        first_ts : Optional[float] = None,
+                        qa_prompt : Optional[PromptTemplate] = None
                         ) -> Tuple[str, Optional[str]]:
     """
     Generate a response using the bot's language model, given a prompt and
@@ -512,12 +499,12 @@ async def extract_thread_conversation(bot: SlackBot, channel_id:str,
         user = msg['user']
         text = msg['text'].replace(f'<@{bot_user_id}>', '').strip()
         if user == bot_user_id:
-                if bot.verbose:
-                    text = re.sub(r'\(_time: .*?\)', '', text)
-                    text = re.sub(r'_Thread too long:.+_', '', text)
-                    text = text.replace('\n\n', '\n')
-                messages_history.append(f'AI: {text}')
-                actual_user = user
+            if bot.verbose:
+                text = re.sub(r'\(_time: .*?\)', '', text)
+                text = re.sub(r'_Thread too long:.+_', '', text)
+                text = text.replace('\n\n', '\n')
+            messages_history.append(f'AI: {text}')
+            actual_user = user
         else:
             text = re.sub(r'!temp=([\d.]+)', '', text)
             if actual_user != user:
