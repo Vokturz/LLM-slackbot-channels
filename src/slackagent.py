@@ -114,6 +114,8 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
         input_variables=["input", "intermediate_steps"]
     )
     llm_chain = LLMChain(llm=llm, prompt=prompt)
+    if not initial_ts:
+        initial_ts = ""
     output_parser = CustomOutputParser(bot=bot,
                                        initial_ts=initial_ts,
                                        channel_id=channel_id)
