@@ -9,6 +9,12 @@ This repository mainly uses **langchain**, it supports the usage of open-source 
 _prompts from https://github.com/f/awesome-chatgpt-prompts_
 
 See a video example here: [https://youtu.be/nHmkCpmMm5U](https://youtu.be/nHmkCpmMm5U)
+
+## What's new? v0.2
+- Improve the way a file is uploaded to a QA thread
+- If using OpenAI models, then you can customize which model you want to use in each channel
+- Use the LLM model as an Agent with your own tools! see more in [v0.2 release](https://github.com/Vokturz/LLM-slackbot-channels/releases/tag/v0.2)
+
 ## Commands
 
 - **/modify_bot**
@@ -42,12 +48,13 @@ See a video example here: [https://youtu.be/nHmkCpmMm5U](https://youtu.be/nHmkCp
 - When the bot is mentioned in a thread, it can respond based on the context. The context limit is handled using a `max token limit` in a similar way as `ConversationTokenBufferMemory` from langchain.
     ![simple_thread](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMzFrMGNyNHh3dGZ1NDJvZGNraXNkeGhueHZ4aTJ1azhjYTU3MmE0cCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/2jCJwf8nQfo226HgN8/giphy.gif)
 
-- If the bot is mentioned in channel along with uploaded file, then it starts a `ConversationRetrievalChain` in a new thread. It has the possibility to add some context and new separators to chunk the file(s). The files are downloaded in `data/tmp` to define a persistent VectorStore in `data/db`, after the generation of the VectorStore all files are deleted.
+- If the bot is mentioned in channel along with uploaded file, then it ask if you want to start a QA thread. It has the possibility to add some context and new separators to chunk the file(s). The files are downloaded in `data/tmp` to define a persistent VectorStore in `data/db`, after the generation of the VectorStore all files are deleted.
 
     Example: `@LLMBot !sep=\nArticle Political Constitution` with a file attached will try to separate the chunks by `\nArticle` for the VectorStore and will starts a thread about `Political Constitution`.
 
     ![qa_thread](https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExZm44c2d4aXJoZHNtazRnb2QydHY2bjJ2ZGMzZzlrdXZ6Y2lhaXBnMSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/POXlBdBJvs1m9Fog1U/giphy.gif)
 
+    If the channel is used as a simple LLM chain, then a `ConversationRetrievalChain`, otherwise a tool to retrieve the important information from the documents is created and passed to the Agent.
 
 ### How are documents handled?
 The documents are handled using **ChromaDB**, saving the database to `data/db/{channel_id}/{timestamp}` for each QA thread, where `channel_id` refers to the channel which contains the thread and `timestamp` to the time when the QA thread was initiated. It is important to mention that typically embedding models are not compatible, so if you change the embedding model after creating the database for a given QA thread, then that thread will not work.
