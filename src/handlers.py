@@ -1,7 +1,7 @@
 from . import prompts
 from .slackbot import SlackBot
 from .utils import (parse_format_body, get_llm_reply,
-                    extract_message_from_thread)
+                    extract_message_from_thread, get_agent_reply)
 from .ingest import process_uploaded_files
 import json
 import os
@@ -47,8 +47,12 @@ def create_handlers(bot: SlackBot) -> None:
                                                  'instructions',
                                                  'query'])
 
+        channel_bot_info = bot.get_channel_llm_info(channel_id)
         # Get the response from the LLM
-        response, initial_ts = await get_llm_reply(bot, prompt, parsed_body)
+        if channel_bot_info['as_agent']:
+            response, initial_ts = await get_agent_reply(bot, parsed_body, None)
+        else:
+            response, initial_ts = await get_llm_reply(bot, prompt, parsed_body)
         # Format the response
         response = f"*<@{user_id}> asked*: {parsed_body['query']}\n*Answer*:\n{response}"
 
@@ -93,6 +97,45 @@ def create_handlers(bot: SlackBot) -> None:
         view["blocks"][1]["element"]["initial_value"] = channel_bot_info['instructions']
         view["blocks"][2]["element"]["initial_value"] = str(channel_bot_info['temperature'])
 
+        # OpenAI model, only if model_type is openai
+        if bot.model_type == 'openai':
+            if 'openai_model' in channel_bot_info:
+                initial_text = ("ChatModel: "
+                                if channel_bot_info['openai_model'].startswith('gpt')
+                                else "InstructModel: ")
+                initial_option = {"text": {
+                                        "type": "plain_text",
+                                        "text": f"{initial_text}{channel_bot_info['openai_model']}"
+                                    },
+                            "value": channel_bot_info['openai_model']
+                            }
+                view["blocks"][3]["element"]["initial_option"] =  initial_option
+        else:
+            view["blocks"][3] = { "type": "section",
+                                  "text": { "type": "plain_text", "text": " "}}
+
+        # Agent or Chain
+        if channel_bot_info['as_agent']:
+            view["blocks"][4]["element"]["initial_option"]["value"] = "as_agent"
+            view["blocks"][4]["element"]["initial_option"]["text"]["text"] = "Use it as an Agent"
+        else:
+            view["blocks"][4]["element"]["initial_option"]["value"] = "as_llm_chain"
+            view["blocks"][4]["element"]["initial_option"]["text"]["text"] = "Use it as a LLM chain"
+
+
+        # Tools
+        all_options = []
+        for tool in bot.tool_names:
+            option = {
+						"text": {
+							"type": "plain_text",
+							"text": tool
+						},
+						"value": tool
+					}
+            all_options.append(option)
+        view["blocks"][5]["element"]["options"] = all_options
+
         # Include channel_id in private_metadata
         extra_data = {"channel_id": channel_id}
         if '!no-notify' in body['text']:
@@ -100,6 +143,20 @@ def create_handlers(bot: SlackBot) -> None:
         else:
             extra_data["notify"] = True
         view["private_metadata"] =  json.dumps(extra_data)
+
+        initial_options = []
+        for tool in channel_bot_info['tool_names']:
+            if tool in bot.tool_names:
+                option = {
+                            "text": {
+                                "type": "plain_text",
+                                "text": tool
+                            },
+                            "value": tool
+                        }
+                initial_options.append(option)
+        if initial_options:
+            view["blocks"][5]["element"]["initial_options"] = initial_options
 
         # Open view for bot modification
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
@@ -120,7 +177,6 @@ def create_handlers(bot: SlackBot) -> None:
         channel_id = json.loads(view["private_metadata"])["channel_id"]
         notify = json.loads(view["private_metadata"])["notify"]
         user = body['user']['id']
-
          # Iterate through each bot value and update it
         for key in bot_values.keys():
             input_value = values[key][key]['value']
@@ -135,6 +191,15 @@ def create_handlers(bot: SlackBot) -> None:
                         "errors": {key: "The input field must be a number between 0 and 1."}})
                     return        
             bot_values[key] = input_value
+
+        if 'openai_model' in values:
+            bot_values['openai_model'] = values['openai_model']['openai_model']['selected_option']['value']
+        as_agent = values['use_it_as']['unused_action']['selected_option']['value']
+        bot_values['as_agent'] = True if 'as_agent' == as_agent else False
+ 
+        selected_tools = values['tool_names']['unused_action']['selected_options']
+        tool_names = [tool['value'] for tool in selected_tools]
+        bot_values['tool_names'] = tool_names
 
         # Update channel's bot info
         bot.define_channel_llm_info(channel_id, bot_values)
@@ -167,9 +232,16 @@ def create_handlers(bot: SlackBot) -> None:
         # Create a response string with the bot's default prompt and temperature
         prompt = prompts.INITIAL_BOT_PROMPT
         response = "*Default Prompt:*\n`"
+        if not bot_info['tool_names']:
+            bot_info['tool_names'] = ['None']
         response += prompt.format(personality=bot_info["personality"],
                               instructions=bot_info["instructions"])
-        response += f"`\n*Temperature:* {bot_info['temperature']}"
+        response += (f"`\n*Temperature:* {bot_info['temperature']}"
+                     f"\n*is Agent:* _{bot_info['as_agent']}_,"
+                     f" *Tools:* _" + ', '.join(bot_info['tool_names']) + '_')
+
+        if bot.model_type == 'openai' and 'openai_model' in bot_info:
+            response += (f"\n*OpenAI Model:* _{bot_info['openai_model']}_")
 
         # Send the response to the user
         await respond(text=response)
@@ -325,15 +397,19 @@ def create_handlers(bot: SlackBot) -> None:
                 extra_context = second_message['text']
                 qa_prompt = qa_prompt.partial(extra_context=extra_context)
                 if bot.verbose:
-                    bot.app.logger.info(f"Asking RetrievalQA. "
+                    bot.app.logger.info(f"Asking inside a Thread. "
                                         f" {extra_context}:"
                                         f" {channel_id}/{first_message['ts']}:"
                                         f" {parsed_body['query']}")
                     
             # Get reply and update initial message
-            response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
-                                                       first_ts=first_message['ts'],
-                                                       qa_prompt=qa_prompt)
+            channel_bot_info = bot.get_channel_llm_info(channel_id)
+            if channel_bot_info['as_agent']:
+                response, initial_ts = await get_agent_reply(bot,parsed_body, first_message['ts'])
+            else:
+                response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
+                                                        first_ts=first_message['ts'],
+                                                        qa_prompt=qa_prompt)
 
             client = bot.app.client
             await client.chat_update(
@@ -476,9 +552,6 @@ def create_handlers(bot: SlackBot) -> None:
                                       args=(channel_id, msg_timestamp, texts,
                                             file_name_list, extra_context))
             thread.start()
-            # bot.define_thread_retriever_db(channel_id, msg_timestamp, texts)
-            # await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
-            #           thread_ts=msg_timestamp, channel=channel_id)
 
     @bot.app.action("unused_action")
     async def handle_unused(ack: Ack):

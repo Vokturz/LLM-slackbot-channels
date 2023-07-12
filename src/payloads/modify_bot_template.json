@@ -19,7 +19,7 @@
 	"blocks": [
 		{
 			"type": "input",
-			"block_id" : "personality",
+			"block_id": "personality",
 			"element": {
 				"type": "plain_text_input",
 				"action_id": "personality",
@@ -32,7 +32,7 @@
 		},
 		{
 			"type": "input",
-			"block_id" : "instructions",
+			"block_id": "instructions",
 			"element": {
 				"type": "plain_text_input",
 				"action_id": "instructions",
@@ -50,7 +50,7 @@
 		},
 		{
 			"type": "input",
-			"block_id" : "temperature",
+			"block_id": "temperature",
 			"element": {
 				"type": "plain_text_input",
 				"action_id": "temperature",
@@ -59,11 +59,129 @@
 			"hint": {
 				"type": "plain_text",
 				"text": "A number between 0 (concrete) to 1 (creative)"
-
 			},
 			"label": {
 				"type": "plain_text",
 				"text": "Temperature"
+			}
+		},
+		{
+			"type": "input",
+			"block_id": "openai_model",
+			"element": {
+				"type": "static_select",
+				"action_id": "openai_model",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select options",
+					"emoji": true
+				},
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-3.5-turbo"
+						},
+						"value": "gpt-3.5-turbo"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-3.5-turbo-16k"
+						},
+						"value": "gpt-3.5-turbo-16k"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-4"
+						},
+						"value": "gpt-4"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-4-32k"
+						},
+						"value": "gpt-4-32k"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "InstructModel: text-davinci-003",
+							"emoji": true
+						},
+						"value": "text-davinci-003"
+					}
+				]
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "OpenAI Model to use",
+				"emoji": true
+			}
+		},
+		{
+			"type": "input",
+			"block_id": "use_it_as",
+			"element": {
+				"type": "radio_buttons",
+				"action_id": "unused_action",
+				"initial_option": {
+					"value": "as_llm_chain",
+					"text": {
+						"type": "plain_text",
+						"text": "Use it as a LLM chain"
+					}
+				},
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "Use it as a LLM chain"
+						},
+						"value": "as_llm_chain"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "Use it as an Agent"
+						},
+						"value": "as_agent"
+					}
+				]
+			},
+			"label": {
+				"type": "plain_text",
+				"text": " ",
+				"emoji": true
+			}
+		},
+		{
+			"type": "input",
+			"block_id": "tool_names",
+			"optional": true,
+			"element": {
+				"type": "multi_static_select",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select options"
+				},
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "*this is plain_text text*"
+						},
+						"value": "value-0"
+					}
+				],
+				"action_id": "unused_action"
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "Tools to use",
+				"emoji": true
 			}
 		}
 	]

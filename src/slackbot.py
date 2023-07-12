@@ -13,6 +13,7 @@ from langchain.llms.base import LLM
 from langchain.docstore.document import Document
 from langchain.vectorstores.base import VectorStore
 from langchain.vectorstores import Chroma
+from langchain.tools import BaseTool
 import glob
 from chromadb.config import Settings
 
@@ -31,9 +32,12 @@ class SlackBot:
                                            " user's questions. Answers in no more"
                                            " than 40 words. You must format your"
                                            " messages in Slack markdown.",
-                 default_temp: float=0.8, chunk_size=500, chunk_overlap=50,
+                 default_temp: float=0.8, max_tokens: int=500,
+                 model_type='fakellm', chunk_size=500,
+                 chunk_overlap=50,
                  k_similarity=5, verbose: bool=False,
-                 log_filename: Optional[str]=None) -> None:
+                 log_filename: Optional[str]=None,
+                 tools: List[Optional[str]]=[]) -> None:
         """
         Initialize a new SlackBot instance.
         
@@ -42,6 +46,8 @@ class SlackBot:
             default_personality: The default personality of the bot.
             default_instructions: The default instructions of the bot.
             default_temp: The default temperature of the bot.
+            max_tokens: The maximum number of tokens for the LLM.
+            model_type: The default model type to use for the LLM.
             chunk_size: The chunk size for the text splitter.
             chunk_overlap: The chunk overlap for the text splitter.
             k_similarity: The number of chunks to return using the retriever.
@@ -53,7 +59,7 @@ class SlackBot:
                         environment variables could not be found.
         """
         self._name = name
-
+        self._model_type = model_type.lower()
         # Setting Logger
         logger_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         self._verbose = verbose
@@ -70,7 +76,7 @@ class SlackBot:
         logger.addHandler(console_handler)
 
         self._default_temp = default_temp
-
+        self._max_tokens = max_tokens
         # for retriever and text splitter
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
@@ -87,7 +93,9 @@ class SlackBot:
         # This could be a class
         default_llm_info = dict(personality=default_personality,
                                 instructions=default_instructions,
-                                temperature=default_temp)
+                                temperature=default_temp,
+                                tool_names=[],
+                                as_agent=False)
         self._default_llm_info = default_llm_info
         
         # This could be loaded using pydantic
@@ -95,10 +103,19 @@ class SlackBot:
         if os.path.exists(llm_info_file):
             with open(llm_info_file, 'r') as f:
                 channels_llm_info = json.load(f)
-                self._channels_llm_info = channels_llm_info
+            for channel_id in channels_llm_info:
+                # update with the new info
+                if 'tool_names' not in channels_llm_info[channel_id]:
+                    channels_llm_info[channel_id]['tool_names'] = []
+                if 'as_agent' not in channels_llm_info[channel_id]:
+                    channels_llm_info[channel_id]['as_agent'] = False
+            self._channels_llm_info = channels_llm_info
+
         else:
             self._channels_llm_info = {}
 
+        self._tools = tools
+        self._tool_names = [tool.name for tool in tools]
         logger.info("Loading Thread Retrievers locations..")
         thread_retriever_db = {}
         for channel_dir in glob.glob(db_dir + "/[CG]*"):
@@ -172,12 +189,15 @@ class SlackBot:
                              config=config, **kwargs)
             
         else:
-            if (config["model_name"].startswith("gpt-3.5")
-                or config["model_name"].startswith("gpt-4")):
+            if config["model_name"].startswith("gpt"):
                 self._llm = ChatOpenAI(**config, **kwargs)
             else:
                 self._llm = OpenAI(**config, **kwargs)
             # self._llm = OpenAI(callbacks=[handler], **config)
+            
+            for channel_id in self._channels_llm_info:
+                if 'openai_model' not in self._channels_llm_info[channel_id]:
+                        self._channels_llm_info[channel_id]['openai_model'] = config["model_name"]
             
     def initialize_embeddings(self, model_type: str, **kwargs) -> None:
         """
@@ -211,6 +231,14 @@ class SlackBot:
         response = await self.app.client.auth_test()
         self._bot_user_id = response["user_id"]
         await AsyncSocketModeHandler(self._app, self._app_token).start_async()
+    
+    @property
+    def max_tokens(self) -> int:
+        return self._max_tokens
+    
+    @property
+    def model_type(self) -> str:
+        return self._model_type
     
     @property
     def chunk_size(self):
@@ -264,22 +292,25 @@ class SlackBot:
     def embeddings(self) -> Embeddings:
         return self._embeddings
         #return (self.embeddings, self.embeddings_clf)
-    
-    def get_temperature(self) -> float:
-        """
-        Get the temperature used in the language model.
+        
+    @property
+    def tool_names(self) -> List[str]:
+        return self._tool_names
 
-        Returns:
-            temp: The temperature used in the language model
+    def get_tools_by_names(self, tool_names: List[str]) -> List[BaseTool]:
         """
-        if 'model_type' in self._llm.__dict__: # CTransformers
-            temperature = self._llm.client.config.temperature
-        else: 
-            try: # OpenAI
-                temperature = self._llm.temperature
-            except: # FakeLLM
-                temperature = self._default_temp
-        return temperature
+        Get tools by their names.
+        
+        Args:
+            tool_names: The names of the tools to get.
+        
+        Returns:
+            tools: A list of tools.
+        """
+        tools = [tool for tool in self._tools 
+                 if tool.name in tool_names]
+        return tools
+
         
     def change_temperature(self, new_temperature: float) -> None :
         """
@@ -424,12 +455,38 @@ class SlackBot:
         Args:
             timestamp: The timestamp of when the file was uploaded.
 
-        Returns
+        Returns:
             files_dict: The file dictionary
         """
         files_dict = self._stored_files[timestamp]
         return files_dict
 
+
+    def get_llm_by_channel(self, channel_id: str, **kwargs) -> LLM:
+        """
+        Get the language model for a given channel.
+
+        Args:
+            channel_id: The id of the channel.
+            kwargs: Additional keyword arguments for the language model.
+
+        Returns:
+            llm: The language model to use in the channel
+        """
+        channel_llm_info = self.get_channel_llm_info(channel_id)
+        if self._model_type == 'openai':
+            config = dict(model_name=channel_llm_info['openai_model'],
+                           temperature=channel_llm_info['temperature'],
+                           max_tokens=self._max_tokens)
+            if config["model_name"].startswith("gpt"):
+                    llm = ChatOpenAI(**config, **kwargs)
+            else:
+                    llm = OpenAI(**config, **kwargs)
+        else:
+            llm = self._llm
+            llm.client.config.temperature = channel_llm_info['temperature']
+        return llm
+    
     def store_files_dict(self, timestamp: float, files_dict: Dict[str, Any]) -> None:
         """
         Store a files dictionary from Slack.
