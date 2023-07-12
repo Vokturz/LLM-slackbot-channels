@@ -40,7 +40,7 @@ QA_PROMPT = (
 
 AGENT_PROMPT = (
     f"{INITIAL_BOT_PROMPT}"
-     "Given a conversation between users {users} and you with the name \"AI\","
+     " Given a conversation between users {users} and you with the name \"AI\","
      " and a follow up question, you must answer as best as you can. If you are"
      " not sure about something, you can use a tool."
      "\nTOOLS:"
