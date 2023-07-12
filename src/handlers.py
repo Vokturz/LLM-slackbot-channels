@@ -178,9 +178,7 @@ def create_handlers(bot: SlackBot) -> None:
  
         selected_tools = values['tool_names']['unused_action']['selected_options']
         tool_names = [tool['value'] for tool in selected_tools]
-        if tool_names:
-            bot_values['tool_names'] = tool_names
-
+        bot_values['tool_names'] = tool_names
         # Update channel's bot info
         bot.define_channel_llm_info(channel_id, bot_values)
         await ack()

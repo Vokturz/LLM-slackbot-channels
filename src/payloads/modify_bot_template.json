@@ -104,6 +104,7 @@
 		{
 			"type": "input",
 			"block_id": "tool_names",
+			"optional": true,
 			"element": {
 				"type": "multi_static_select",
 				"placeholder": {
