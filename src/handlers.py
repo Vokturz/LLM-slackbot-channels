@@ -97,14 +97,33 @@ def create_handlers(bot: SlackBot) -> None:
         view["blocks"][1]["element"]["initial_value"] = channel_bot_info['instructions']
         view["blocks"][2]["element"]["initial_value"] = str(channel_bot_info['temperature'])
 
-        if channel_bot_info['as_agent']:
-            view["blocks"][3]["element"]["initial_option"]["value"] = "as_agent"
-            view["blocks"][3]["element"]["initial_option"]["text"]["text"] = "Use it as an Agent"
+        # OpenAI model, only if model_type is openai
+        if bot.model_type == 'openai':
+            initial_text = ("ChatModel: "
+                            if channel_bot_info['openai_model'].startswith('gpt')
+                            else "InstructModel: ")
+            initial_option = {"text": {
+                                    "type": "plain_text",
+                                    "text": f"{initial_text}{channel_bot_info['openai_model']}"
+                                },
+                        "value": channel_bot_info['openai_model']
+                        }
+            view["blocks"][3]["element"]["initial_option"] =  initial_option
         else:
-            view["blocks"][3]["element"]["initial_option"]["value"] = "as_llm_chain"
-            view["blocks"][3]["element"]["initial_option"]["text"]["text"] = "Use it as a LLM chain"
+            view["blocks"][3] = { "type": "section",
+                                  "text": { "type": "plain_text", "text": " "}}
+        print(view)
 
-        
+        # Agent or Chain
+        if channel_bot_info['as_agent']:
+            view["blocks"][4]["element"]["initial_option"]["value"] = "as_agent"
+            view["blocks"][4]["element"]["initial_option"]["text"]["text"] = "Use it as an Agent"
+        else:
+            view["blocks"][4]["element"]["initial_option"]["value"] = "as_llm_chain"
+            view["blocks"][4]["element"]["initial_option"]["text"]["text"] = "Use it as a LLM chain"
+
+
+        # Tools
         all_options = []
         for tool in bot.tool_names:
             option = {
@@ -115,7 +134,7 @@ def create_handlers(bot: SlackBot) -> None:
 						"value": tool
 					}
             all_options.append(option)
-        view["blocks"][4]["element"]["options"] = all_options
+        view["blocks"][5]["element"]["options"] = all_options
 
         # Include channel_id in private_metadata
         extra_data = {"channel_id": channel_id}
@@ -137,7 +156,7 @@ def create_handlers(bot: SlackBot) -> None:
                         }
                 initial_options.append(option)
         if initial_options:
-            view["blocks"][4]["element"]["initial_options"] = initial_options
+            view["blocks"][5]["element"]["initial_options"] = initial_options
 
         # Open view for bot modification
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
@@ -173,12 +192,15 @@ def create_handlers(bot: SlackBot) -> None:
                     return        
             bot_values[key] = input_value
 
+        if 'openai_model' in values:
+            bot_values['openai_model'] = values['openai_model']['openai_model']['selected_option']['value']
         as_agent = values['use_it_as']['unused_action']['selected_option']['value']
         bot_values['as_agent'] = True if 'as_agent' == as_agent else False
  
         selected_tools = values['tool_names']['unused_action']['selected_options']
         tool_names = [tool['value'] for tool in selected_tools]
         bot_values['tool_names'] = tool_names
+
         # Update channel's bot info
         bot.define_channel_llm_info(channel_id, bot_values)
         await ack()
@@ -217,6 +239,9 @@ def create_handlers(bot: SlackBot) -> None:
         response += (f"`\n*Temperature:* {bot_info['temperature']}"
                      f"\n*is Agent:* _{bot_info['as_agent']}_,"
                      f" *Tools:* _" + ', '.join(bot_info['tool_names']) + '_')
+
+        if bot.model_type == 'openai':
+            response += (f"\n*OpenAI Model:* _{bot_info['openai_model']}_")
 
         # Send the response to the user
         await respond(text=response)

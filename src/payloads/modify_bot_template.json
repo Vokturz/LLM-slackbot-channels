@@ -67,6 +67,62 @@
 		},
 		{
 			"type": "input",
+			"block_id": "openai_model",
+			"element": {
+				"type": "static_select",
+				"action_id": "openai_model",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select options",
+					"emoji": true
+				},
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-3.5-turbo"
+						},
+						"value": "gpt-3.5-turbo"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-3.5-turbo-16k"
+						},
+						"value": "gpt-3.5-turbo-16k"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-4"
+						},
+						"value": "gpt-4"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "ChatModel: gpt-4-32k"
+						},
+						"value": "gpt-4-32k"
+					},
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "InstructModel: text-davinci-003",
+							"emoji": true
+						},
+						"value": "text-davinci-003"
+					}
+				]
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "OpenAI Model to use",
+				"emoji": true
+			}
+		},
+		{
+			"type": "input",
 			"block_id": "use_it_as",
 			"element": {
 				"type": "radio_buttons",
