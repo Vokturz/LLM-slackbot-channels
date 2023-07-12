@@ -4,19 +4,28 @@ from langchain import LLMChain
 from langchain.prompts import StringPromptTemplate
 from typing import List, Union, Any
 from langchain.schema import AgentAction, AgentFinish, OutputParserException
+from langchain.llms.base import LLM
 from .prompts import AGENT_PROMPT
 from .slackbot import SlackBot
+import asyncio
 import re
 
 # Set up a prompt template
 class CustomPromptTemplate(StringPromptTemplate):
+    """
+    Custom prompt template for the Slack Agent
+    """
     # The template to use
     template: str
-    # The list of tools available
+    # Personality of the bot
     personality: str
+    # Instructions for the bot
     instructions: str
+    # The list of tools available
     tools: List[BaseTool]
+    # List of users inside the chat as a string
     users : str
+    # Chat history as a string
     chat_history : str
 
     def format(self, **kwargs) -> str:
@@ -40,7 +49,15 @@ class CustomPromptTemplate(StringPromptTemplate):
         return self.template.format(**kwargs)
 
 class CustomOutputParser(AgentOutputParser):
+    """
+    Custom output parser for the Slack Agent
+    """
+    # The Slackbot instance, used for logging
     bot: Any
+    # timestamp of the initial message
+    initial_ts: str
+    # channel where the message was sent
+    channel_id: str
 
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
         if f"AI: " in text:
@@ -53,11 +70,40 @@ class CustomOutputParser(AgentOutputParser):
             raise OutputParserException(f"Could not parse LLM output: `{text}`")
         action = match.group(1)
         action_input = match.group(2)
-        self.bot.app.logger.info(match[0].replace('\n', ', '))
+        msg = match[0].replace('\n', ', ')
+        self.bot.app.logger.info(msg)
+        client = self.bot.app.client
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(client.chat_update(channel=self.channel_id,
+                                    ts=self.initial_ts, 
+                                    text=msg + "... :hourglass_flowing_sand:"))
+        except Exception as e:
+            self.bot.app.logger.error(f'SlackAgentCannot update the message: {e}')
+        
         return AgentAction(action.strip(), action_input.strip(" ").strip('"'), text)
     
 
-def slack_agent(bot, llm, personality, instructions, users, chat_history, tools):
+def slack_agent(bot: SlackBot, llm: LLM, personality: str,
+                instructions: str, users: str, chat_history: str,
+                tools: List[BaseTool], initial_ts: float, channel_id: str
+                ) -> AgentExecutor:
+    """
+    Create an agent executor for the Slackbot
+
+    Args:
+        bot: The Slackbot object.
+        llm: The LLM to use
+        personality: The personality of the bot
+        instructions: The instructions for the bot
+        users: The list of users inside the chat as a string
+        chat_history: The chat history as a string
+        tools: The list of tools available
+        initial_ts: The timestamp of the initial message
+        channel_id: The channel where the message was sent
+    Returns:
+        agent_executor: The agent executor
+    """
     prompt = CustomPromptTemplate(
         template=AGENT_PROMPT,
         personality=personality,
@@ -68,7 +114,9 @@ def slack_agent(bot, llm, personality, instructions, users, chat_history, tools)
         input_variables=["input", "intermediate_steps"]
     )
     llm_chain = LLMChain(llm=llm, prompt=prompt)
-    output_parser = CustomOutputParser(bot=bot)
+    output_parser = CustomOutputParser(bot=bot,
+                                       initial_ts=initial_ts,
+                                       channel_id=channel_id)
     tool_names = [tool.name for tool in tools]
     agent = LLMSingleActionAgent(
         llm_chain=llm_chain,
@@ -76,5 +124,7 @@ def slack_agent(bot, llm, personality, instructions, users, chat_history, tools)
         stop=["\nObservation:"],
         allowed_tools=tool_names
     )
-    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools, handle_parsing_errors=True) # , verbose=bot.verbose
+    agent_executor = (AgentExecutor
+                      .from_agent_and_tools(agent=agent, tools=tools,
+                       handle_parsing_errors="Check your output and make sure it conforms!")) # , verbose=bot.verbose
     return agent_executor
