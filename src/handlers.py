@@ -99,16 +99,17 @@ def create_handlers(bot: SlackBot) -> None:
 
         # OpenAI model, only if model_type is openai
         if bot.model_type == 'openai':
-            initial_text = ("ChatModel: "
-                            if channel_bot_info['openai_model'].startswith('gpt')
-                            else "InstructModel: ")
-            initial_option = {"text": {
-                                    "type": "plain_text",
-                                    "text": f"{initial_text}{channel_bot_info['openai_model']}"
-                                },
-                        "value": channel_bot_info['openai_model']
-                        }
-            view["blocks"][3]["element"]["initial_option"] =  initial_option
+            if 'openai_model' in channel_bot_info:
+                initial_text = ("ChatModel: "
+                                if channel_bot_info['openai_model'].startswith('gpt')
+                                else "InstructModel: ")
+                initial_option = {"text": {
+                                        "type": "plain_text",
+                                        "text": f"{initial_text}{channel_bot_info['openai_model']}"
+                                    },
+                            "value": channel_bot_info['openai_model']
+                            }
+                view["blocks"][3]["element"]["initial_option"] =  initial_option
         else:
             view["blocks"][3] = { "type": "section",
                                   "text": { "type": "plain_text", "text": " "}}
@@ -239,7 +240,7 @@ def create_handlers(bot: SlackBot) -> None:
                      f"\n*is Agent:* _{bot_info['as_agent']}_,"
                      f" *Tools:* _" + ', '.join(bot_info['tool_names']) + '_')
 
-        if bot.model_type == 'openai':
+        if bot.model_type == 'openai' and 'openai_model' in bot_info:
             response += (f"\n*OpenAI Model:* _{bot_info['openai_model']}_")
 
         # Send the response to the user
@@ -551,7 +552,7 @@ def create_handlers(bot: SlackBot) -> None:
                                       args=(channel_id, msg_timestamp, texts,
                                             file_name_list, extra_context))
             thread.start()
-            
+
     @bot.app.action("unused_action")
     async def handle_unused(ack: Ack):
         """Just to pass unused_action"""
