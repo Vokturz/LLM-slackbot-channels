@@ -112,7 +112,6 @@ def create_handlers(bot: SlackBot) -> None:
         else:
             view["blocks"][3] = { "type": "section",
                                   "text": { "type": "plain_text", "text": " "}}
-        print(view)
 
         # Agent or Chain
         if channel_bot_info['as_agent']:
@@ -410,8 +409,6 @@ def create_handlers(bot: SlackBot) -> None:
                 response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
                                                         first_ts=first_message['ts'],
                                                         qa_prompt=qa_prompt)
-            
-            
 
             client = bot.app.client
             await client.chat_update(
@@ -554,10 +551,7 @@ def create_handlers(bot: SlackBot) -> None:
                                       args=(channel_id, msg_timestamp, texts,
                                             file_name_list, extra_context))
             thread.start()
-            # bot.define_thread_retriever_db(channel_id, msg_timestamp, texts)
-            # await say(f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_",
-            #           thread_ts=msg_timestamp, channel=channel_id)
-
+            
     @bot.app.action("unused_action")
     async def handle_unused(ack: Ack):
         """Just to pass unused_action"""
