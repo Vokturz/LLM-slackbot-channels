@@ -138,8 +138,8 @@ async def send_initial_message(bot: SlackBot,
         init_msg = (f"*<@{parsed_body['user_id']}> asked*:"
                     f" {parsed_body['query']}\n" + init_msg)
     client = bot.app.client
-    initial_ts = await client.chat_postMessage(channel=parsed_body['channel_id'],
-                                    text=init_msg, thread_ts=thread_ts)['ts']
+    initial_ts = (await client.chat_postMessage(channel=parsed_body['channel_id'],
+                                    text=init_msg, thread_ts=thread_ts))['ts']
 
     return initial_ts
 
@@ -197,15 +197,6 @@ async def adjust_llm_temperature(bot,
     if parsed_body['change_temp']:
         change_temperature(llm, new_temperature=parsed_body['new_temp'])
         temp = parsed_body['new_temp']
-    else:
-        if parsed_body['new_temp'] == -1:
-            if parsed_body["from_command"]:
-                client = bot.app.client
-                warning_msg = (f"`!temp` only accepts values between 0 and 1."
-                            f" Using current value of `{actual_temp}`")
-                await client.chat_postEphemeral(channel=parsed_body['channel_id'],
-                                                text=warning_msg,
-                                                user=parsed_body['user_id'])
     return temp
 
 async def get_llm_reply(bot: SlackBot, 
