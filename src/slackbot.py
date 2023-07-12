@@ -58,11 +58,11 @@ class SlackBot:
             ValueError: If the SLACK_BOT_TOKEN or SLACK_APP_TOKEN 
                         environment variables could not be found.
         """
-        self._name = name
-        self._model_type = model_type.lower()
+        self.name = name
+        self.model_type = model_type.lower()
         # Setting Logger
         logger_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        self._verbose = verbose
+        self.verbose = verbose
         level = logging.INFO #logging.DEBUG if verbose else logging.INFO
         logger = logging.getLogger(__name__)
         filename = log_filename
@@ -75,20 +75,20 @@ class SlackBot:
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        self._default_temp = default_temp
-        self._max_tokens = max_tokens
+        self.default_temp = default_temp
+        self.max_tokens = max_tokens
         # for retriever and text splitter
-        self._chunk_size = chunk_size
-        self._chunk_overlap = chunk_overlap
-        self._k_similarity = k_similarity
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.k_similarity = k_similarity
 
         try:
-            self._bot_token = os.environ['SLACK_BOT_TOKEN']
-            self._app_token = os.environ['SLACK_APP_TOKEN']
+            self.bot_token = os.environ['SLACK_BOT_TOKEN']
+            self.app_token = os.environ['SLACK_APP_TOKEN']
         except KeyError as e:
             raise ValueError("Could not find required environment variable") from e
 
-        self._app =  AsyncApp(logger=logger, token=self._bot_token, name=self._name)
+        self.app =  AsyncApp(logger=logger, token=self.bot_token, name=self.name)
 
         # This could be a class
         default_llm_info = dict(personality=default_personality,
@@ -96,7 +96,7 @@ class SlackBot:
                                 temperature=default_temp,
                                 tool_names=[],
                                 as_agent=False)
-        self._default_llm_info = default_llm_info
+        self.default_llm_info = default_llm_info
         
         # This could be loaded using pydantic
         logger.info("Loading Channels information..")
@@ -109,13 +109,13 @@ class SlackBot:
                     channels_llm_info[channel_id]['tool_names'] = []
                 if 'as_agent' not in channels_llm_info[channel_id]:
                     channels_llm_info[channel_id]['as_agent'] = False
-            self._channels_llm_info = channels_llm_info
+            self.channels_llm_info = channels_llm_info
 
         else:
-            self._channels_llm_info = {}
+            self.channels_llm_info = {}
 
-        self._tools = tools
-        self._tool_names = [tool.name for tool in tools]
+        self.tools = tools
+        self.tool_names = [tool.name for tool in tools]
         logger.info("Loading Thread Retrievers locations..")
         thread_retriever_db = {}
         for channel_dir in glob.glob(db_dir + "/[CG]*"):
@@ -124,7 +124,7 @@ class SlackBot:
             for ts_dir in glob.glob(channel_dir + "/*"):
                 ts_val = ts_dir.split("/")[-1]
                 thread_retriever_db[channel_id][ts_val] = ts_dir
-        self._thread_retriever_db = thread_retriever_db
+        self.thread_retriever_db = thread_retriever_db
 
         try:
             psswd = os.environ["PERMISSIONS_PASSWORD"]
@@ -141,11 +141,11 @@ class SlackBot:
         if os.path.exists(permissions_file):
             with open(permissions_file, 'r') as f:
                 allowed_users = json.load(f)
-                self._allowed_users = allowed_users
+                self.allowed_users = allowed_users
         else:
-            self._allowed_users = {"users" : ["@all"]}
+            self.allowed_users = {"users" : ["@all"]}
         
-        self._stored_files = {}
+        self.stored_files = {}
 
             
     def initialize_llm(self, model_type: str,
@@ -169,15 +169,15 @@ class SlackBot:
         """
 
         # Max number of tokens to pass in a channel thread
-        self._max_tokens_threads = max_tokens_threads
+        self.max_tokens_threads = max_tokens_threads
 
         if not config:
             config = {'temperature': 0.8, 'max_tokens': 300}
         model_type = model_type.lower()
-        self._model_type = model_type
+        self.model_type = model_type
         if model_type == 'fakellm':
             responses = [f'foo' for i in range(1000)]
-            self._llm = FakeListLLM(responses = responses)
+            self.llm = FakeListLLM(responses = responses)
 
         elif model_type != 'openai':
             try:
@@ -185,19 +185,19 @@ class SlackBot:
             except KeyError as e:
                 raise ValueError("Could not find required environment variable") from e
 
-            self._llm = CTransformers(model=model_path, model_type=model_type,
+            self.llm = CTransformers(model=model_path, model_type=model_type,
                              config=config, **kwargs)
             
         else:
             if config["model_name"].startswith("gpt"):
-                self._llm = ChatOpenAI(**config, **kwargs)
+                self.llm = ChatOpenAI(**config, **kwargs)
             else:
-                self._llm = OpenAI(**config, **kwargs)
-            # self._llm = OpenAI(callbacks=[handler], **config)
+                self.llm = OpenAI(**config, **kwargs)
+            # self.llm = OpenAI(callbacks=[handler], **config)
             
-            for channel_id in self._channels_llm_info:
-                if 'openai_model' not in self._channels_llm_info[channel_id]:
-                        self._channels_llm_info[channel_id]['openai_model'] = config["model_name"]
+            for channel_id in self.channels_llm_info:
+                if 'openai_model' not in self.channels_llm_info[channel_id]:
+                        self.channels_llm_info[channel_id]['openai_model'] = config["model_name"]
             
     def initialize_embeddings(self, model_type: str, **kwargs) -> None:
         """
@@ -213,104 +213,24 @@ class SlackBot:
         """
         model_type = model_type.lower()
         if model_type == 'fakellm':
-            self._embeddings = FakeEmbeddings(size=768)
+            self.embeddings = FakeEmbeddings(size=768)
         elif model_type == 'openai':
-            self._embeddings = OpenAIEmbeddings(**kwargs)
+            self.embeddings = OpenAIEmbeddings(**kwargs)
         else:
             try:
                 emb_model = os.environ['EMB_MODEL']
             except KeyError as e:
                 raise ValueError("Could not find required environment variable") from e
             
-            self._embeddings = HuggingFaceEmbeddings(model_name=emb_model)
+            self.embeddings = HuggingFaceEmbeddings(model_name=emb_model)
 
     async def start(self) -> None:
         """
         Start the SlackBot instance.
         """
         response = await self.app.client.auth_test()
-        self._bot_user_id = response["user_id"]
-        await AsyncSocketModeHandler(self._app, self._app_token).start_async()
-    
-    @property
-    def max_tokens(self) -> int:
-        return self._max_tokens
-    
-    @property
-    def model_type(self) -> str:
-        return self._model_type
-    
-    @property
-    def chunk_size(self):
-        return self._chunk_size
-    
-    @property
-    def chunk_overlap(self):
-        return self._chunk_overlap
-
-    @property
-    def k_similarity(self):
-        return self._k_similarity
-    
-    @property
-    def app(self) -> AsyncApp:
-        return self._app
-    
-    @property
-    def bot_token(self) -> str:
-        return self._bot_token
-    
-    @property
-    def verbose(self) -> bool:
-        return self._verbose
-    
-    @property
-    def bot_user_id(self) -> str:
-        return self._bot_user_id
-    
-    @property
-    def model_type(self) -> str:
-        return self._model_type
-    
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def llm(self) -> LLM:
-        return self._llm
-        
-    @property
-    def allowed_users(self) -> Dict:
-        return self._allowed_users
-    
-    @property
-    def max_tokens_threads(self) -> int:
-        return self._max_tokens_threads
-    
-    @property
-    def embeddings(self) -> Embeddings:
-        return self._embeddings
-        #return (self.embeddings, self.embeddings_clf)
-        
-    @property
-    def tool_names(self) -> List[str]:
-        return self._tool_names
-
-    def get_tools_by_names(self, tool_names: List[str]) -> List[BaseTool]:
-        """
-        Get tools by their names.
-        
-        Args:
-            tool_names: The names of the tools to get.
-        
-        Returns:
-            tools: A list of tools.
-        """
-        tools = [tool for tool in self._tools 
-                 if tool.name in tool_names]
-        return tools
-
+        self.bot_user_id = response["user_id"]
+        await AsyncSocketModeHandler(self.app, self.app_token).start_async()
         
     def change_temperature(self, new_temperature: float) -> None :
         """
@@ -319,15 +239,15 @@ class SlackBot:
         Args:
             new_temperature: The new temperature to use.
         """
-        if 'model_type' in self._llm.__dict__: # CTransformers
-            self._llm.client.config.temperature = new_temperature
+        if 'model_type' in self.llm.__dict__: # CTransformers
+            self.llm.client.config.temperature = new_temperature
         else:
             try: # OpenAI
-                self._llm.temperature = new_temperature 
+                self.llm.temperature = new_temperature 
             except: # FakeLLM
                 pass
-        if self._verbose:
-            self._app.logger.info(f"LLM Temperature changed to {new_temperature}")
+        if self.verbose:
+            self.app.logger.info(f"LLM Temperature changed to {new_temperature}")
 
     def define_thread_retriever_db(self, channel_id: str,
                                      ts: float, docs : List[Document],
@@ -344,18 +264,18 @@ class SlackBot:
             file_name_list: The file names of the documents.
             extra_context: Any extra context to add to the QA thread
         """
-        if channel_id not in self._thread_retriever_db:
-            self._thread_retriever_db[channel_id] = {}
+        if channel_id not in self.thread_retriever_db:
+            self.thread_retriever_db[channel_id] = {}
             if not os.path.exists(f"{db_dir}/{channel_id}"):
                 os.mkdir(f"{db_dir}/{channel_id}")
         persist_directory = f"{db_dir}/{channel_id}/{ts}"
-        if ts not in self._thread_retriever_db[channel_id]:
+        if ts not in self.thread_retriever_db[channel_id]:
             os.mkdir(persist_directory)
             msg = "Creating DB for channel's thread.."
-            init_msg = asyncio.run(self._app.client.chat_postMessage(channel=channel_id,
+            init_msg = asyncio.run(self.app.client.chat_postMessage(channel=channel_id,
                                                     thread_ts=ts,
                                                     text=msg))
-            db = VStore.from_documents(docs, embedding=self._embeddings,
+            db = VStore.from_documents(docs, embedding=self.embeddings,
                                        persist_directory=persist_directory,
                                        client_settings=Settings(
                                             chroma_db_impl='duckdb+parquet',
@@ -366,11 +286,11 @@ class SlackBot:
             
             db.persist()
             db = None
-            self._thread_retriever_db[channel_id][ts] = persist_directory
-            self._app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
+            self.thread_retriever_db[channel_id][ts] = persist_directory
+            self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
             msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
             msg += f" The files are about {extra_context}"
-            asyncio.run(self._app.client.chat_update(channel=channel_id,
+            asyncio.run(self.app.client.chat_update(channel=channel_id,
                                                      ts=init_msg['ts'],
                                                      text=msg))
 
@@ -388,7 +308,7 @@ class SlackBot:
             persist_directory: The persisted directory of the vector database
                                corresponding to the channel and thread.
         """
-        persist_directory = self._thread_retriever_db[channel_id][ts]
+        persist_directory = self.thread_retriever_db[channel_id][ts]
         return persist_directory
     
     def define_channel_llm_info(self, channel_id: str,
@@ -406,10 +326,10 @@ class SlackBot:
                                 - temperature: The temperature used in the
                                                 language model.
         """
-        self._channels_llm_info[channel_id] = channel_bot_info
-        self._app.logger.info(f"Defined Channel {channel_id} info")
+        self.channels_llm_info[channel_id] = channel_bot_info
+        self.app.logger.info(f"Defined Channel {channel_id} info")
         with open(llm_info_file, 'w') as f:
-                json.dump(self._channels_llm_info, f, ensure_ascii=False, indent=4)
+                json.dump(self.channels_llm_info, f, ensure_ascii=False, indent=4)
 
     def get_channel_llm_info(self, channel_id: str
                              ) -> Dict[str, Union[str, float]]:
@@ -429,10 +349,10 @@ class SlackBot:
         """
 
         # if is not defined
-        if channel_id not in self._channels_llm_info:
-            self.define_channel_llm_info(channel_id, self._default_llm_info) 
+        if channel_id not in self.channels_llm_info:
+            self.define_channel_llm_info(channel_id, self.default_llm_info) 
 
-        channel_llm_info = self._channels_llm_info[channel_id]
+        channel_llm_info = self.channels_llm_info[channel_id]
         return channel_llm_info
     
     def define_allowed_users(self, users_list: List[str]) -> None:
@@ -442,10 +362,10 @@ class SlackBot:
         Args:
             users_list: A list of slack users.
         """
-        self._allowed_users["users"] = users_list
-        self._app.logger.info(f"Defined allowed users: {users_list}")
+        self.allowed_users["users"] = users_list
+        self.app.logger.info(f"Defined allowed users: {users_list}")
         with open(permissions_file, 'w') as f:
-                json.dump(self._allowed_users, f, ensure_ascii=False, indent=4)
+                json.dump(self.allowed_users, f, ensure_ascii=False, indent=4)
 
 
     def get_stored_files_dict(self, timestamp: float) -> Dict[str, Any]:
@@ -458,7 +378,7 @@ class SlackBot:
         Returns:
             files_dict: The file dictionary
         """
-        files_dict = self._stored_files[timestamp]
+        files_dict = self.stored_files[timestamp]
         return files_dict
 
 
@@ -474,19 +394,20 @@ class SlackBot:
             llm: The language model to use in the channel
         """
         channel_llm_info = self.get_channel_llm_info(channel_id)
-        if self._model_type == 'openai':
+        if self.model_type == 'openai':
             config = dict(model_name=channel_llm_info['openai_model'],
                            temperature=channel_llm_info['temperature'],
-                           max_tokens=self._max_tokens)
+                           max_tokens=self.max_tokens)
             if config["model_name"].startswith("gpt"):
                     llm = ChatOpenAI(**config, **kwargs)
             else:
                     llm = OpenAI(**config, **kwargs)
         else:
-            llm = self._llm
+            llm = self.llm
             llm.client.config.temperature = channel_llm_info['temperature']
         return llm
     
+
     def store_files_dict(self, timestamp: float, files_dict: Dict[str, Any]) -> None:
         """
         Store a files dictionary from Slack.
@@ -495,8 +416,24 @@ class SlackBot:
             timestamp: The timestamp of when the file was uploaded.
             files_dict: The files dictionary to store
         """
-        self._stored_files[timestamp] = files_dict
+        self.stored_files[timestamp] = files_dict
     
+        
+    def get_tools_by_names(self, tool_names: List[str]) -> List[BaseTool]:
+        """
+        Get tools by their names.
+        
+        Args:
+            tool_names: The names of the tools to get.
+        
+        Returns:
+            tools: A list of tools.
+        """
+        tools = [tool for tool in self.tools 
+                 if tool.name in tool_names]
+        return tools
+    
+
     def check_permissions(self, func: Callable[..., None]) -> Callable[..., None]:
         """
         Decorator that checks if the user has permission to use the command.
@@ -511,21 +448,17 @@ class SlackBot:
         import functools
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            body = kwargs["body"] if "body" in kwargs else kwargs["command"]
-            respond = kwargs["respond"] if "respond" in kwargs else None
-            ack = kwargs["ack"] if "ack" in kwargs else None
-            if "event" in body:
-                user = body["event"]["user"]
-            else:
-                user = body["user_id"]
+            body = kwargs.get("body", kwargs.get("command"))
+            respond = kwargs.get("respond")
+            ack = kwargs.get("ack")
+            user = body["event"]["user"] if "event" in body else body["user_id"]
 
-            if (user in self._allowed_users["users"] or
-                "@all" in self._allowed_users["users"] ):
+            if (user in self.allowed_users["users"] or
+                "@all" in self.allowed_users["users"] ):
                 return await func(*args, **kwargs)
-            else:
-                if ack:
-                    await ack()
-                if respond:
-                    await respond(text=":x: You don't have permissions to use this command")
-                return
+
+            if ack:
+                await ack()
+            if respond:
+                await respond(text=":x: You don't have permissions to use this command")
         return wrapper
