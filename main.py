@@ -4,16 +4,36 @@ from src.handlers import create_handlers
 import asyncio
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 handler = StreamingStdOutCallbackHandler()
-
+from langchain.agents import load_tools, Tool
 # Load environment variables
 load_dotenv()
+
+from langchain.tools import tool
+import subprocess
+@tool
+def disk_usage(query: str) -> str:
+    """useful for when you need to answer questions about the disk usage."""
+    output = subprocess.check_output(['df', '-h'], text=True)
+    output = "This is the output of `df -h`:\n" + output
+    return output
+
+@tool
+def memory_usage(query: str) -> str:
+    """useful for when you need to answer questions about memory usage."""
+    output = subprocess.check_output(['free', '-h'], text=True)
+    output = "This is the output of `free -h`. Mem refers to RAM memory and Swap to swap memory:\n" + output
+    return output
+
+tools = [disk_usage, memory_usage]
+tools.extend(load_tools(['ddg-search', 'arxiv']))
 
 # Create SlackBot instance
 bot = SlackBot(name='SlackBot', verbose=True,
                chunk_size=500, # Chunk size for splitter
                chunk_overlap=50, # Chunk overlap for splitter
                k_similarity=5, # Numbers of chunks to return in retriever
-               log_filename='_slackbot.log'
+               log_filename='_slackbot.log',
+               tools=tools,
                )
 
 ## LLM configuration
@@ -26,7 +46,7 @@ else:
 
 # Initialize LLM and embeddings
 bot.app.logger.info("Initializing LLM and embeddings...")
-bot.initialize_llm(model_type, max_tokens_threads=1000, config=config, callbacks=[handler])
+bot.initialize_llm(model_type, max_tokens_threads=4000, config=config, callbacks=[handler])
 bot.initialize_embeddings(model_type)
 
 # Create handlers for commands /ask, /modify_bot, /bot_info  and bot mentions

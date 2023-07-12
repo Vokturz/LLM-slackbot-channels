@@ -13,6 +13,7 @@ from langchain.llms.base import LLM
 from langchain.docstore.document import Document
 from langchain.vectorstores.base import VectorStore
 from langchain.vectorstores import Chroma
+from langchain.tools import BaseTool
 import glob
 from chromadb.config import Settings
 
@@ -33,7 +34,8 @@ class SlackBot:
                                            " messages in Slack markdown.",
                  default_temp: float=0.8, chunk_size=500, chunk_overlap=50,
                  k_similarity=5, verbose: bool=False,
-                 log_filename: Optional[str]=None) -> None:
+                 log_filename: Optional[str]=None,
+                 tools: List[Optional[str]]=[]) -> None:
         """
         Initialize a new SlackBot instance.
         
@@ -87,7 +89,9 @@ class SlackBot:
         # This could be a class
         default_llm_info = dict(personality=default_personality,
                                 instructions=default_instructions,
-                                temperature=default_temp)
+                                temperature=default_temp,
+                                tool_names=[],
+                                as_agent=False)
         self._default_llm_info = default_llm_info
         
         # This could be loaded using pydantic
@@ -95,10 +99,20 @@ class SlackBot:
         if os.path.exists(llm_info_file):
             with open(llm_info_file, 'r') as f:
                 channels_llm_info = json.load(f)
-                self._channels_llm_info = channels_llm_info
+            for channel_id in channels_llm_info:
+                # update with the new info
+                if 'tool_names' not in channels_llm_info[channel_id]:
+                    channels_llm_info[channel_id]['tool_names'] = []
+                if 'as_agent' not in channels_llm_info[channel_id]:
+                    channels_llm_info[channel_id]['as_agent'] = False
+
+            self._channels_llm_info = channels_llm_info
+
         else:
             self._channels_llm_info = {}
 
+        self._tools = tools
+        self._tool_names = [tool.name for tool in tools]
         logger.info("Loading Thread Retrievers locations..")
         thread_retriever_db = {}
         for channel_dir in glob.glob(db_dir + "/[CG]*"):
@@ -264,7 +278,15 @@ class SlackBot:
     def embeddings(self) -> Embeddings:
         return self._embeddings
         #return (self.embeddings, self.embeddings_clf)
-    
+        
+    @property
+    def tool_names(self) -> List[str]:
+        return self._tool_names
+
+    def get_tools_by_names(self, tool_names: List[str]) -> List[BaseTool]:
+        tools = [tool for tool in self._tools 
+                 if tool.name in tool_names]
+        return tools
     def get_temperature(self) -> float:
         """
         Get the temperature used in the language model.
