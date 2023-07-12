@@ -3,7 +3,6 @@ import re
 import time
 import asyncio
 from typing import (Dict, Optional, Any, Union, Tuple, List, Set)
-from slack_bolt import Say
 from .slackbot import SlackBot
 from langchain import PromptTemplate, LLMChain
 from langchain.chains import ConversationalRetrievalChain, RetrievalQA
@@ -131,7 +130,7 @@ async def prepare_messages_history(bot: SlackBot,
 
 async def send_initial_message(bot: SlackBot,
                                parsed_body: Dict[str, Union[str, float]],
-                               thread_ts: Optional[float]) -> Optional[float]:
+                               thread_ts: Optional[float]) -> Optional[str]:
     """
     Send a initial message: "bot is thinking.."
 
@@ -227,7 +226,7 @@ async def get_llm_reply(bot: SlackBot,
                         parsed_body: Dict[str, Union[str, float]],
                         first_ts : Optional[float]=None,
                         qa_prompt : Optional[PromptTemplate]=None
-                        ) -> Tuple[str, Optional[Say]]:
+                        ) -> Tuple[str, Optional[str]]:
     """
     Generate a response using the bot's language model, given a prompt and
     a parsed request data.
@@ -246,8 +245,6 @@ async def get_llm_reply(bot: SlackBot,
         initial_ts: The timestamp of the initial message sent by the bot.
     """
     channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
-    actual_temp = channel_llm_info['temperature']
-
     llm = bot.get_llm_by_channel(channel_id=parsed_body['channel_id'])
 
     # dictionary to format the prompt inside the chain
@@ -344,7 +341,7 @@ async def get_llm_reply(bot: SlackBot,
 async def get_agent_reply(bot: SlackBot, 
                           parsed_body: Dict[str, Union[str, float]],
                           first_ts : Optional[float]=None,
-                          ) -> Tuple[str, Optional[Say]]:
+                          ) -> Tuple[str, Optional[str]]:
     """
     Generate a response using the bot's language model, given a prompt and
     a parsed request data.
@@ -360,8 +357,6 @@ async def get_agent_reply(bot: SlackBot,
         initial_ts: The timestamp of the initial message sent by the bot.
     """
     channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
-    actual_temp = channel_llm_info['temperature']
-    from .slackagent import slack_agent
 
     llm = bot.get_llm_by_channel(channel_id=parsed_body['channel_id'])
 
@@ -434,11 +429,14 @@ async def get_agent_reply(bot: SlackBot,
             except KeyError:
                 bot.app.logger.info('There are no documents for this thread')
 
+        from .slackagent import slack_agent
         executor_agent = slack_agent(bot, llm, personality=to_chain['personality'],
                                     instructions=to_chain['instructions'],
                                     users=to_chain['users'],
                                     chat_history=to_chain['chat_history'],
-                                    tools=to_chain['tools'],) 
+                                    tools=to_chain['tools'],
+                                    initial_ts=initial_ts,
+                                    channel_id=parsed_body['channel_id']) 
         try: 
             resp_llm = await executor_agent.arun(input=parsed_body['query'], callbacks=[async_handler])
         except NotImplementedError:
