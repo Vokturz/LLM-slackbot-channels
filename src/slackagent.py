@@ -57,7 +57,7 @@ class CustomOutputParser(AgentOutputParser):
         return AgentAction(action.strip(), action_input.strip(" ").strip('"'), text)
     
 
-def slack_agent(bot, personality, instructions, users, chat_history, tools):
+def slack_agent(bot, llm, personality, instructions, users, chat_history, tools):
     prompt = CustomPromptTemplate(
         template=AGENT_PROMPT,
         personality=personality,
@@ -67,7 +67,7 @@ def slack_agent(bot, personality, instructions, users, chat_history, tools):
         chat_history=chat_history,
         input_variables=["input", "intermediate_steps"]
     )
-    llm_chain = LLMChain(llm=bot.llm, prompt=prompt)
+    llm_chain = LLMChain(llm=llm, prompt=prompt)
     output_parser = CustomOutputParser(bot=bot)
     tool_names = [tool.name for tool in tools]
     agent = LLMSingleActionAgent(

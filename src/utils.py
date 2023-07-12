@@ -12,6 +12,7 @@ from chromadb.config import Settings
 from .slackcallback import SlackAsyncCallbackHandler, SlackCallbackHandler
 from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 from langchain.agents import Tool
+from langchain.llms.base import LLM
 
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -158,8 +159,41 @@ async def send_initial_message(bot: SlackBot,
         initial_ts = None
     return initial_ts
 
+def get_temperature(llm: LLM) -> float:
+    """
+    Get the temperature used in the language model.
 
-async def adjust_bot_temperature(bot: SlackBot,
+    Args:
+        llm: The language model.
+    Returns:
+        temp: The temperature used in the language model
+    """
+    if 'model_type' in llm.__dict__: # CTransformers
+        temperature = llm.client.config.temperature
+    else: 
+        try: # OpenAI
+            temperature = llm.temperature
+        except: # FakeLLM
+            temperature = 0
+    return temperature
+
+def change_temperature(llm: LLM, new_temperature: float) -> None :
+    """
+    Update the temperature used in the language model.
+
+    Args:
+        new_temperature: The new temperature to use.
+    """
+    if 'model_type' in llm.__dict__: # CTransformers
+        llm.client.config.temperature = new_temperature
+    else:
+        try: # OpenAI
+            llm.temperature = new_temperature 
+        except: # FakeLLM
+            pass
+
+async def adjust_llm_temperature(bot,
+                                 llm: LLM,
                                  parsed_body: Dict[str, Union[str, float]]
                                  ) -> float:
     """
@@ -174,10 +208,10 @@ async def adjust_bot_temperature(bot: SlackBot,
     Returns:
         temp: The new temperature of the bot
     """
-    actual_temp = bot.get_temperature()
+    actual_temp = get_temperature(llm)
     temp = actual_temp
     if parsed_body['change_temp']:
-        bot.change_temperature(new_temperature=parsed_body['new_temp'])
+        change_temperature(llm, new_temperature=parsed_body['new_temp'])
         temp = parsed_body['new_temp']
     if parsed_body['new_temp'] == -1:
         if parsed_body["from_command"]:
@@ -214,6 +248,8 @@ async def get_llm_reply(bot: SlackBot,
     channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
     actual_temp = channel_llm_info['temperature']
 
+    llm = bot.get_llm_by_channel(channel_id=parsed_body['channel_id'])
+
     # dictionary to format the prompt inside the chain
     to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions']}
 
@@ -245,7 +281,7 @@ async def get_llm_reply(bot: SlackBot,
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        temp = await adjust_bot_temperature(bot, parsed_body)
+        temp = await adjust_llm_temperature(bot, llm, parsed_body)
 
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
@@ -268,7 +304,7 @@ async def get_llm_reply(bot: SlackBot,
                                     instructions=to_chain['instructions'],
                                     users=to_chain['users'])
             chain = ConversationalRetrievalChain
-            chain = chain.from_llm(bot.llm,
+            chain = chain.from_llm(llm,
                                    vectorstore.as_retriever(kwargs={'k': bot.k_similarity}),
                                    combine_docs_chain_kwargs={"prompt" : qa_prompt},
                                    condense_question_prompt=prompt,
@@ -285,7 +321,7 @@ async def get_llm_reply(bot: SlackBot,
                               callbacks=[handler])
         else:
             # is not a QA question  
-            chain = LLMChain(llm=bot.llm, prompt=prompt)
+            chain = LLMChain(llm=llm, prompt=prompt)
             try:
                 resp_llm = await chain.arun(to_chain, callbacks=[async_handler])
             except NotImplementedError:
@@ -295,12 +331,11 @@ async def get_llm_reply(bot: SlackBot,
 
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
-        bot.change_temperature(new_temperature=actual_temp)
 
     if bot.verbose:
         if qa_prompt:
             to_chain["question"] = parsed_body["query"]
-        n_tokens =  bot.llm.get_num_tokens(prompt.format(**to_chain))
+        n_tokens = llm.get_num_tokens(prompt.format(**to_chain))
         response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
         bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
@@ -328,7 +363,8 @@ async def get_agent_reply(bot: SlackBot,
     actual_temp = channel_llm_info['temperature']
     from .slackagent import slack_agent
 
-    
+    llm = bot.get_llm_by_channel(channel_id=parsed_body['channel_id'])
+
     # dictionary to format the prompt inside the chain
     to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions', 'tool_names']}
 
@@ -361,7 +397,7 @@ async def get_agent_reply(bot: SlackBot,
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        temp = await adjust_bot_temperature(bot, parsed_body)
+        temp = await adjust_llm_temperature(bot, llm, parsed_body)
 
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
@@ -383,7 +419,7 @@ async def get_agent_reply(bot: SlackBot,
                                                 anonymized_telemetry=False)
                                     )
                 qa_chain = RetrievalQA.from_chain_type(
-                    llm=bot.llm, chain_type="stuff",
+                    llm=llm, chain_type="stuff",
                     retriever=vectorstore.as_retriever(kwargs={'k': bot.k_similarity})
                 )
                 second_message = await extract_message_from_thread(bot, parsed_body['channel_id'],
@@ -391,13 +427,14 @@ async def get_agent_reply(bot: SlackBot,
                 extra_context = re.search("The files are about (.*)", second_message['text']).group(1)
                 doc_retriever = [Tool(name="doc_retriever",
                                     func=qa_chain.run,
+                                    coroutine=qa_chain.arun,
                                     description=f"useful for when you need to answer questions about {extra_context}.",
                                     )]
                 to_chain['tools'].extend(doc_retriever)
             except KeyError:
                 bot.app.logger.info('There are no documents for this thread')
 
-        executor_agent = slack_agent(bot, personality=to_chain['personality'],
+        executor_agent = slack_agent(bot, llm, personality=to_chain['personality'],
                                     instructions=to_chain['instructions'],
                                     users=to_chain['users'],
                                     chat_history=to_chain['chat_history'],
@@ -409,16 +446,14 @@ async def get_agent_reply(bot: SlackBot,
                                     ', using concurrent mode')
                 resp_llm = executor_agent.run(input=parsed_body['query'], callbacks=[handler])
 
-
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
-        bot.change_temperature(new_temperature=actual_temp)
 
     if bot.verbose:
         from .prompts import AGENT_PROMPT
         to_chain["input"] = parsed_body["query"]
         to_chain["agent_scratchpad"] = ""
-        n_tokens =  bot.llm.get_num_tokens(AGENT_PROMPT.format(**to_chain))
+        n_tokens =  llm.get_num_tokens(AGENT_PROMPT.format(**to_chain))
         n_tokens += 100
         response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens~={n_tokens}`_)"
         bot.app.logger.info(response.replace('\n', ''))
