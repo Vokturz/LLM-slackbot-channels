@@ -1,70 +1,60 @@
-INITIAL_BOT_PROMPT = (
-    "### Instruction: You are {personality}. {instructions}"
-)
+INITIAL_BOT_PROMPT = "Instruction: You are {personality}. {instructions}"
 
-DEFAULT_PROMPT = (
-    f"{INITIAL_BOT_PROMPT}"
-    "\n### Question: {query}"
-    "\n### Response: "
-    )
+DEFAULT_PROMPT = INITIAL_BOT_PROMPT + """
+Question: {query}
+Response: """
 
-THREAD_PROMPT = (
-    f"{INITIAL_BOT_PROMPT}"
-    " Now, continue this conversation between users {users} and you with the"
-    " name \"AI\". If you don't know the answer, just say that you don't know,"
-    " don't try to make up an answer."
-    "\n\n\"{chat_history}\""
-    "\nAI: "
-)
+    
 
-CONDENSE_QUESTION_PROMPT = (
-    f"{INITIAL_BOT_PROMPT}"
-    " Given the following conversation between users {users} and you with the"
-    " name \"AI\", and a follow up question, rephrase the follow up question"
-    " to be a standalone question, in its original language."
-    "\nChat History:\n{chat_history}"
-    "\nFollow Up Input: {question}"
-    "\nStandalone question:"
-)
+THREAD_PROMPT = INITIAL_BOT_PROMPT + """
+Now, continue this conversation between users {users} and you with the name \"AI\". If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-QA_PROMPT = (
-    f"{INITIAL_BOT_PROMPT}"
-    "Use the following pieces of context to answer the question at the end."
-    " If you don't know the answer, just say that you don't know, don't try"
-    "to make up an answer. "
-    "\nThis comes from a document about {extra_context}:\n"
-    "\n\n{context}\n"
-    "\nQuestion: {question}"
-    "\nHelpful Answer in the same language as question:"
-)
+{chat_history}
+AI: """
 
-AGENT_PROMPT = (
-    f"{INITIAL_BOT_PROMPT}"
-     " Given a conversation between users {users} and you with the name \"AI\","
-     " and a follow up question, you must answer as best as you can. If you are"
-     " not sure about something, you can use a tool."
-     "\nTOOLS:"
-     "\n------"
-     "\n\nYou have access to the following tools:"
-     "\n\n{tools}\n\n"
-     "To use a tool, please use the following format:"
-     "\n```"
-     "\nThought: Do I need to use a tool? Yes"
-     "\nAction: the action to take, should be one of [{tool_names}]"
-     "\nAction Input: the input to the action"
-     "\nObservation: the result of the action"
-     "\n... (this Thought/Action/Action Input/Observation can repeat N times)"
-     "\n```"
-     "\n\nWhen you have a response to say, or if you do not need to use a tool,"
-     " you MUST use the format:"
-     "\n\n```"
-     "\nThought: Do I need to use a tool? No"
-     "\nAI: [your response in the same language of the conversation]"
-     "\n```"
-     "\n\nBegin! If even after using a tool you still can't figure out the"
-     " answer, then say that you don't know and ask for more context."
-    "\n\nPrevious conversation history:"
-    "\n{chat_history}\n"
-    "\nNew message: {input}"
-    "\n{agent_scratchpad}"
-)
+CONDENSE_QUESTION_PROMPT = INITIAL_BOT_PROMPT + """
+Given the following conversation between users {users} and you with the name "AI", and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+Chat History:
+{chat_history}
+Follow Up Input: {question}
+Standalone question:"""
+
+QA_PROMPT = INITIAL_BOT_PROMPT + """
+Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+This comes from a document about {extra_context}:
+
+{context}
+
+Question: {question}
+Helpful Answer in the same language as question: """
+
+AGENT_PROMPT = INITIAL_BOT_PROMPT + """
+Given a conversation between users (identified as {users}) and you (identified by \"AI\"), and a follow up question, you must answer as best as you can.
+Your final answer must be in the same language used in the conversation.
+
+TOOLS:
+------
+
+You have access to the following tools:
+
+{tools}
+
+If after using the tools you don't know the answer, just say that you don't know, don't try to make up an answer. 
+To use a tool, please use the following format:
+
+```
+message: the input question/request you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer based on my observation
+Final Answer: the final answer to the original input message is the exact complete detailed explanation from the last Observation
+
+Begin! Remember, your final answer must be in the same language used in the original message.
+
+Chat history:
+{chat_history}
+New message: {input}
+{agent_scratchpad}"""
