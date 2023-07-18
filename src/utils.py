@@ -240,7 +240,7 @@ async def get_llm_reply(bot: SlackBot,
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        temp = adjust_llm_temperature(bot, llm, parsed_body)
+        temp = adjust_llm_temperature(llm, parsed_body)
 
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
@@ -352,7 +352,7 @@ async def get_agent_reply(bot: SlackBot,
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        temp = adjust_llm_temperature(bot, llm, parsed_body)
+        temp = adjust_llm_temperature(llm, parsed_body)
 
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
