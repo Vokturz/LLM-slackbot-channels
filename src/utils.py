@@ -145,12 +145,8 @@ async def send_initial_message(bot: SlackBot,
 
 def get_temperature(llm: LLM) -> float:
     """
-    Get the temperature used in the language model.
-
-    Args:
-        llm: The language model.
-    Returns:
-        temp: The temperature used in the language model
+    Returns the temperature of the given language model.
+    Defaults to 0 for FakeLLM.
     """
     if 'model_type' in llm.__dict__: # CTransformers
         temperature = llm.client.config.temperature
@@ -163,10 +159,7 @@ def get_temperature(llm: LLM) -> float:
 
 def change_temperature(llm: LLM, new_temperature: float) -> None :
     """
-    Update the temperature used in the language model.
-
-    Args:
-        new_temperature: The new temperature to use.
+    Changes the temperature of the given language model.
     """
     if 'model_type' in llm.__dict__: # CTransformers
         llm.client.config.temperature = new_temperature
@@ -176,21 +169,12 @@ def change_temperature(llm: LLM, new_temperature: float) -> None :
         except: # FakeLLM
             pass
 
-async def adjust_llm_temperature(bot,
-                                 llm: LLM,
-                                 parsed_body: Dict[str, Union[str, float]]
-                                 ) -> float:
+def adjust_llm_temperature(llm: LLM,
+                           parsed_body: Dict[str, Union[str, float]]
+                           ) -> float:
     """
-    Updates bot temperature according to parsed_body to generate a response
-    from the LLM. 
-
-    Args:
-        bot: The Slackbot object.
-        parsed_body: The relevant information from the body obtained from
-                     parse_format_body.
-
-    Returns:
-        temp: The new temperature of the bot
+    Adjusts the LLM's temperature based on the parsed body,
+    returning the new temperature.
     """
     actual_temp = get_temperature(llm)
     temp = actual_temp
@@ -256,7 +240,7 @@ async def get_llm_reply(bot: SlackBot,
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        temp = await adjust_llm_temperature(bot, llm, parsed_body)
+        temp = adjust_llm_temperature(bot, llm, parsed_body)
 
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
@@ -275,9 +259,7 @@ async def get_llm_reply(bot: SlackBot,
                                             persist_directory=db_path,
                                             anonymized_telemetry=False)
                                 )
-            prompt = prompt.partial(personality=to_chain['personality'],
-                                    instructions=to_chain['instructions'],
-                                    users=to_chain['users'])
+            prompt = prompt.partial(users=to_chain['users'])
             chain = ConversationalRetrievalChain
             chain = chain.from_llm(llm,
                                    vectorstore.as_retriever(kwargs={'k': bot.k_similarity}),
@@ -310,8 +292,8 @@ async def get_llm_reply(bot: SlackBot,
     if bot.verbose:
         if qa_prompt:
             to_chain["question"] = parsed_body["query"]
-        n_tokens = llm.get_num_tokens(prompt.format(**to_chain))
-        response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens={n_tokens}`_)"
+        #n_tokens = llm.get_num_tokens(prompt.format(**to_chain))
+        response += f"\n(_time: `{final_time}` min. `temperature={temp}`_)"
         bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
     return response, initial_ts
@@ -370,7 +352,7 @@ async def get_agent_reply(bot: SlackBot,
     llm_call = asyncio.Lock()
     async with llm_call:
         start_time = time.time()
-        temp = await adjust_llm_temperature(bot, llm, parsed_body)
+        temp = adjust_llm_temperature(bot, llm, parsed_body)
 
         if bot.model_type == 'fakellm':
             await asyncio.sleep(10)
@@ -426,12 +408,12 @@ async def get_agent_reply(bot: SlackBot,
         final_time = round((time.time() - start_time)/60,2)
 
     if bot.verbose:
-        from .prompts import AGENT_PROMPT
-        to_chain["input"] = parsed_body["query"]
-        to_chain["agent_scratchpad"] = ""
-        n_tokens =  llm.get_num_tokens(AGENT_PROMPT.format(**to_chain))
-        n_tokens += 100
-        response += f"\n(_time: `{final_time}` min. `temperature={temp}, n_tokens~={n_tokens}`_)"
+        # from .prompts import AGENT_PROMPT
+        # to_chain["input"] = parsed_body["query"]
+        # to_chain["agent_scratchpad"] = ""
+        # n_tokens =  llm.get_num_tokens(AGENT_PROMPT.format(**to_chain))
+        # n_tokens += 100 # an estimator
+        response += f"\n(_time: `{final_time}` min. `temperature={temp}`_)"
         bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
     return response, initial_ts
