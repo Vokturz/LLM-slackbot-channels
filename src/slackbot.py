@@ -208,7 +208,7 @@ class SlackBot:
             kwargs: Additional keyword arguments for OpenAI embeddings.
 
         Raises:
-            ValueError: If model_type is ctransformers and EMBD_MODEL
+            ValueError: If model_type is ctransformers and EMB_MODEL
                         environment variable could not be found
         """
         model_type = model_type.lower()
@@ -232,22 +232,6 @@ class SlackBot:
         self.bot_user_id = response["user_id"]
         await AsyncSocketModeHandler(self.app, self.app_token).start_async()
         
-    def change_temperature(self, new_temperature: float) -> None :
-        """
-        Update the temperature used in the language model.
-
-        Args:
-            new_temperature: The new temperature to use.
-        """
-        if 'model_type' in self.llm.__dict__: # CTransformers
-            self.llm.client.config.temperature = new_temperature
-        else:
-            try: # OpenAI
-                self.llm.temperature = new_temperature 
-            except: # FakeLLM
-                pass
-        if self.verbose:
-            self.app.logger.info(f"LLM Temperature changed to {new_temperature}")
 
     def define_thread_retriever_db(self, channel_id: str,
                                      ts: float, docs : List[Document],
@@ -357,10 +341,7 @@ class SlackBot:
     
     def define_allowed_users(self, users_list: List[str]) -> None:
         """
-        Define the list of allowed users who can use the bot.
-
-        Args:
-            users_list: A list of slack users.
+        Sets the list of users who can interact with the bot.
         """
         self.allowed_users["users"] = users_list
         self.app.logger.info(f"Defined allowed users: {users_list}")
@@ -370,13 +351,8 @@ class SlackBot:
 
     def get_stored_files_dict(self, timestamp: float) -> Dict[str, Any]:
         """
-        Get the stored file dictionary for a given timestamp.
-
-        Args:
-            timestamp: The timestamp of when the file was uploaded.
-
-        Returns:
-            files_dict: The file dictionary
+        Returns the file dictionary for the provided timestamp, which comes
+        from the uploaded files by a Slack user.
         """
         files_dict = self.stored_files[timestamp]
         return files_dict
@@ -384,14 +360,7 @@ class SlackBot:
 
     def get_llm_by_channel(self, channel_id: str, **kwargs) -> LLM:
         """
-        Get the language model for a given channel.
-
-        Args:
-            channel_id: The id of the channel.
-            kwargs: Additional keyword arguments for the language model.
-
-        Returns:
-            llm: The language model to use in the channel
+        Retrieves the language model configured for a specific channel.
         """
         channel_llm_info = self.get_channel_llm_info(channel_id)
         if self.model_type == 'openai':
@@ -410,24 +379,15 @@ class SlackBot:
 
     def store_files_dict(self, timestamp: float, files_dict: Dict[str, Any]) -> None:
         """
-        Store a files dictionary from Slack.
-
-        Args:
-            timestamp: The timestamp of when the file was uploaded.
-            files_dict: The files dictionary to store
+        Stores the file dictionary against the provided timestamp.
+        The file dictionary comes from the uploaded files by a Slack user.
         """
         self.stored_files[timestamp] = files_dict
     
         
     def get_tools_by_names(self, tool_names: List[str]) -> List[BaseTool]:
         """
-        Get tools by their names.
-        
-        Args:
-            tool_names: The names of the tools to get.
-        
-        Returns:
-            tools: A list of tools.
+        Returns a list of tools that match the given names.
         """
         tools = [tool for tool in self.tools 
                  if tool.name in tool_names]
@@ -436,13 +396,7 @@ class SlackBot:
 
     def check_permissions(self, func: Callable[..., None]) -> Callable[..., None]:
         """
-        Decorator that checks if the user has permission to use the command.
-
-        Args:
-            func: The function to be decorated.
-
-        Returns:
-            wrapper: The wrapper function
+        Decorator that verifies user permission to execute a command
         """
         
         import functools
