@@ -12,8 +12,7 @@ Now, continue this conversation between users {users} and you with the name \"AI
 {chat_history}
 AI: """
 
-CONDENSE_QUESTION_PROMPT = INITIAL_BOT_PROMPT + """
-Given the following conversation between users {users} and you with the name "AI", and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+CONDENSE_QUESTION_PROMPT =  """Given the following conversation between users {users} and you with the name \"AI\", and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
 {chat_history}
 Follow Up Input: {question}
@@ -39,11 +38,10 @@ You have access to the following tools:
 
 {tools}
 
-If after using the tools you don't know the answer, just say that you don't know, don't try to make up an answer. 
 To use a tool, please use the following format:
 
 ```
-message: the input question/request you must answer
+Message: the input question/request you must answer
 Thought: you should always think about what to do
 Action: the action to take, should be one of [{tool_names}]
 Action Input: the input to the action
@@ -56,5 +54,5 @@ Begin! Remember, your final answer must be in the same language used in the orig
 
 Chat history:
 {chat_history}
-New message: {input}
-{agent_scratchpad}"""
+Message: {input}
+Thought: {agent_scratchpad}"""
