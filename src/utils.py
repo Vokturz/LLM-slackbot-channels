@@ -520,7 +520,7 @@ def custom_token_memory(bot: SlackBot,
 
 async def get_doc_retriever_tool(bot: SlackBot, llm: LLM, 
                                  parsed_body: Dict[str, Union[str, float]],
-                                 first_ts : Optional[str]='') -> Tool:
+                                 first_ts : Optional[str]='') -> List[Tool]:
     """
     Create and return a doc_retriever tool, which can be used to retrieve
     information from documents

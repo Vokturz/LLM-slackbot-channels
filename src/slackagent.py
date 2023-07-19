@@ -83,6 +83,7 @@ class CustomOutputParser(AgentOutputParser):
             self.bot.app.logger.error(f'SlackAgent Cannot update the message: {e}')
         
         return AgentAction(action.strip(), action_input.strip(" ").strip('"'), text)
+    
 
 def slack_agent(bot: SlackBot, llm: LLM, personality: str,
                 instructions: str, users: str, chat_history: str,
@@ -128,5 +129,5 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
     )
     agent_executor = (AgentExecutor
                       .from_agent_and_tools(agent=agent, tools=tools, verbose=bot.verbose,
-                       handle_parsing_errors="Check your output and make sure it conforms!")) # , verbose=bot.verbose
+                       handle_parsing_errors=True))
     return agent_executor
