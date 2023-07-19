@@ -241,57 +241,49 @@ class SlackBot:
         if not os.path.exists(f"{db_dir}/{channel_id}"):
             os.mkdir(f"{db_dir}/{channel_id}")
         persist_directory = f"{db_dir}/{channel_id}/{ts}"
-
         if not os.path.exists(persist_directory):
             os.mkdir(persist_directory)
-            if ts:
-                msg = "Creating DB for channel's thread.."
-                init_msg = asyncio.run(self.app.client.chat_postMessage(channel=channel_id,
-                                                        thread_ts=ts,
-                                                        text=msg))
-            db = Chroma.from_documents(docs, embedding=self.embeddings,
-                                    persist_directory=persist_directory,
-                                    client_settings=Settings(
-                                            chroma_db_impl='duckdb+parquet',
-                                            persist_directory=persist_directory,
-                                            anonymized_telemetry=False
-                                            )
-                                        )
-            db.persist()
-            db = None
 
-            if ts:
-                msg_extra_context = ', '.join([extra_context[_file] for _file in extra_context])
-                self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
-                msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
-                msg += f" The files are about {msg_extra_context}"
-                asyncio.run(self.app.client.chat_update(channel=channel_id,
-                                                    ts=init_msg['ts'],
+        if ts:
+            msg = "Creating DB for channel's thread.."
+            init_msg = asyncio.run(self.app.client.chat_postMessage(channel=channel_id,
+                                                    thread_ts=ts,
                                                     text=msg))
-            else:
-                msg = "File added to Channel!"
-                init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
-                                                    user=user_id,
-                                                    text=msg))
-                channel_bot_info = self.channels_llm_info[channel_id]
-                if 'files' not in channel_bot_info:
-                    channel_bot_info['files'] = {}
-                channel_bot_info['files'] = extra_context
-                self.define_channel_llm_info(channel_id, channel_bot_info)
         else:
-            db = Chroma.from_documents(docs, embedding=self.embeddings,
-                                       persist_directory=persist_directory,
-                                       client_settings=Settings(
-                                            chroma_db_impl='duckdb+parquet',
-                                            persist_directory=persist_directory,
-                                            anonymized_telemetry=False
-                                            )
-                                        )
-            msg = "Creating DB for channel.."
+            msg = "Adding files to channel.."
             init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
-                                                    user=user_id,
-                                                    text=msg))
-            
+                                                user=user_id,
+                                                text=msg))
+        db = Chroma.from_documents(docs, embedding=self.embeddings,
+                                persist_directory=persist_directory,
+                                client_settings=Settings(
+                                        chroma_db_impl='duckdb+parquet',
+                                        persist_directory=persist_directory,
+                                        anonymized_telemetry=False
+                                        )
+                                    )
+        db.persist()
+        db = None
+
+        if ts:
+            msg_extra_context = ', '.join([extra_context[_file] for _file in extra_context])
+            self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
+            msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
+            msg += f" The files are about {msg_extra_context}"
+            asyncio.run(self.app.client.chat_update(channel=channel_id,
+                                                ts=init_msg['ts'],
+                                                text=msg))
+        else:
+            msg = "File added to Channel!"
+            init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
+                                                user=user_id,
+                                                text=msg, replace_original=True))
+            channel_bot_info = self.channels_llm_info[channel_id]
+            if 'files' not in channel_bot_info:
+                channel_bot_info['files'] = {}
+            channel_bot_info['files'] = extra_context
+            self.define_channel_llm_info(channel_id, channel_bot_info)
+   
 
     def get_retriever_db_path(self, channel_id: str, ts: Optional[float]=''
                                   ) -> VectorStore:
