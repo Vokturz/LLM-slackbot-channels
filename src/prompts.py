@@ -28,7 +28,7 @@ Question: {question}
 Helpful Answer in the same language as question: """
 
 AGENT_PROMPT = INITIAL_BOT_PROMPT + """
-Given a conversation between users (identified as {users}) and you (identified by \"AI\"), and a follow up question, you must answer as best as you can.
+Given a conversation between users (identified as {users}) and you (identified by \"AI\"), and a follow up message, you must answer as best as you can.
 Your final answer must be in the same language used in the conversation.
 
 TOOLS:
@@ -48,7 +48,7 @@ Action Input: the input to the action
 Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer based on my observation
-Final Answer: the final answer to the original input message is the exact complete detailed explanation from the last Observation
+Final Answer: the final answer to the original input message
 
 Begin! Remember, your final answer must be in the same language used in the original message.
 
