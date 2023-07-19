@@ -16,7 +16,7 @@ from langchain.vectorstores import Chroma
 from langchain.tools import BaseTool
 import glob
 from chromadb.config import Settings
-
+from .ingest import does_vectorstore_exist
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 llm_info_file = f'{current_directory}/../data/channels_llm_info.json'
@@ -99,6 +99,7 @@ class SlackBot:
         
         # This could be loaded using pydantic
         logger.info("Loading Channels information..")
+        self.channels_llm_info = {}
         if os.path.exists(llm_info_file):
             with open(llm_info_file, 'r') as f:
                 channels_llm_info = json.load(f)
@@ -109,14 +110,13 @@ class SlackBot:
                 if 'as_agent' not in channels_llm_info[channel_id]:
                     channels_llm_info[channel_id]['as_agent'] = False
                 if 'files' in channels_llm_info[channel_id]:
-                    db_path = f"{db_dir}/{channel_id}/chroma-collections.parquet"
-                    print(db_path)
-                    if not os.path.isfile(db_path): # No db exists
+                    db_path = f"{db_dir}/{channel_id}/"
+                    if not does_vectorstore_exist(db_path): # No db exists
                         del channels_llm_info[channel_id]['files']
+                self.define_channel_llm_info(channel_id,
+                                             channels_llm_info[channel_id],
+                                             verbose=False)
             self.channels_llm_info = channels_llm_info
-
-        else:
-            self.channels_llm_info = {}
 
         self.tools = tools
         self.tool_names = [tool.name for tool in tools]
@@ -229,7 +229,7 @@ class SlackBot:
         
 
     def define_retriever_db(self, channel_id: str, docs : List[Document],
-                            file_name_list: List[str], ts: Optional[str]='',
+                            files_name_list: List[str], ts: Optional[str]='',
                             extra_context: Dict[str, str] = None,
                             user_id: Optional[str] = None
                                      ) -> None:
@@ -239,7 +239,7 @@ class SlackBot:
         Args:
             channel_id: The id of the channel.
             docs: The documents to store in the vector database.
-            file_name_list: The file names of the documents.
+            files_name_list: The file names of the documents.
             ts: The timestamp of the thread.
             extra_context: Any extra context for each document to add to the QA thread
         """
@@ -259,20 +259,27 @@ class SlackBot:
             init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
                                                 user=user_id,
                                                 text=msg))
+        
         chroma_settings = Settings(chroma_db_impl='duckdb+parquet',
                                    persist_directory=persist_directory,
                                    anonymized_telemetry=False)
-        db = Chroma.from_documents(docs, embedding=self.embeddings,
-                                persist_directory=persist_directory,
-                                client_settings=chroma_settings
-                                    )
+        if does_vectorstore_exist(persist_directory):
+            self.app.logger.info(f"Appending to existing DB at {persist_directory}")
+            db = Chroma(persist_directory=persist_directory,
+                        embedding_function=self.embeddings,
+                        client_settings=chroma_settings)
+            db.add_documents(docs)
+        else:
+            db = Chroma.from_documents(docs, embedding=self.embeddings,
+                                    persist_directory=persist_directory,
+                                    client_settings=chroma_settings)
         db.persist()
         db = None
 
         if ts:
             msg_extra_context = ', '.join([extra_context[_file] for _file in extra_context])
             self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
-            msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
+            msg = f"_This is a QA Thread using files `{'` `'.join(files_name_list)}`_."
             msg += f" The files are about {msg_extra_context}"
             asyncio.run(self.app.client.chat_update(channel=channel_id,
                                                 ts=init_msg['ts'],
@@ -285,7 +292,8 @@ class SlackBot:
             channel_bot_info = self.channels_llm_info[channel_id]
             if 'files' not in channel_bot_info:
                 channel_bot_info['files'] = {}
-            channel_bot_info['files'] = extra_context
+            for _file in files_name_list: 
+                channel_bot_info['files'][_file] = extra_context[_file]
             self.define_channel_llm_info(channel_id, channel_bot_info)
    
 
@@ -309,7 +317,8 @@ class SlackBot:
         return persist_directory
     
     def define_channel_llm_info(self, channel_id: str,
-                                channel_bot_info: Dict[str, Union[str, float]]
+                                channel_bot_info: Dict[str, Union[str, float]],
+                                verbose: bool = True
                                 ) -> None:
         """
         Defines the LLM info for a given channel
@@ -324,7 +333,8 @@ class SlackBot:
                                                 language model.
         """
         self.channels_llm_info[channel_id] = channel_bot_info
-        self.app.logger.info(f"Defined Channel {channel_id} info")
+        if verbose:
+            self.app.logger.info(f"Defined Channel {channel_id} info")
         with open(llm_info_file, 'w') as f:
                 json.dump(self.channels_llm_info, f, ensure_ascii=False, indent=4)
 
@@ -362,7 +372,7 @@ class SlackBot:
                 json.dump(self.allowed_users, f, ensure_ascii=False, indent=4)
 
 
-    def get_stored_files_dict(self, timestamp: float) -> Dict[str, Any]:
+    def get_stored_files_dict(self, timestamp: float) -> List[Dict[str, Any]]:
         """
         Returns the file dictionary for the provided timestamp, which comes
         from the uploaded files by a Slack user.
@@ -390,10 +400,10 @@ class SlackBot:
         return llm
     
 
-    def store_files_dict(self, timestamp: float, files_dict: Dict[str, Any]) -> None:
+    def store_files_dict(self, timestamp: float, files_dict: List[Dict[str, Any]]) -> None:
         """
-        Stores the file dictionary against the provided timestamp.
-        The file dictionary comes from the uploaded files by a Slack user.
+        Stores the files dictionary against the provided timestamp.
+        The files dictionary comes from the uploaded files by a Slack user.
         """
         self.stored_files[timestamp] = files_dict
     

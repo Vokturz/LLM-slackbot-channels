@@ -380,6 +380,7 @@ def create_handlers(bot: SlackBot) -> None:
         
         # Get the bot info asociated with the channel
         channel_id = parsed_body["channel_id"]
+        channel_bot_info = bot.get_channel_llm_info(channel_id)
 
         # Ensure is only used in channels
         if channel_id[0] not in ['C', 'G']:
@@ -420,7 +421,7 @@ def create_handlers(bot: SlackBot) -> None:
                                     f" {parsed_body['query']}")
                 
             # Get reply and update initial message
-            channel_bot_info = bot.get_channel_llm_info(channel_id)
+            
             if channel_bot_info['as_agent']:
                 response, initial_ts = await get_agent_reply(bot, parsed_body, thread_ts,
                                                              qa_thread)
@@ -437,24 +438,33 @@ def create_handlers(bot: SlackBot) -> None:
                 files =  body['event']['files']
                 msg_timestamp = body['event']['ts']
 
-                # store the file dict temporally
-                bot.store_files_dict(msg_timestamp, files)
-
                 # Sent a temporary message
                 msg = ("Hey! looks like you have uploaded some files. Do you "
                       "want to interact with them?")
-                await bot.app.client.chat_postEphemeral(
-                    user=body['event']['user'],
-                    channel=channel_id,
-                    text="upload files",
-                    blocks=[{
-                        "type": "section",
-                        "text": { "type": "mrkdwn", "text": msg},
-                        "accessory": {"type": "button",
-                                      "text": {"type": "plain_text",
-                                               "text": "Yes"},
-                                      "action_id": "files_button",
-                                      "value" : msg_timestamp}}])
+                file_name_list = [f["name"] for f in files]
+
+                for i, _file in enumerate(file_name_list):
+                    if _file in channel_bot_info['files']:
+                        bot.app.logger.info(f"File '{_file}' already in channel {channel_id}")
+                        msg += f"\n-_*{_file}* already exists._"
+                        del files[i]
+                        
+
+                # store the file dict temporally
+                if files:
+                    bot.store_files_dict(msg_timestamp, files)
+                    await bot.app.client.chat_postEphemeral(
+                        user=body['event']['user'],
+                        channel=channel_id,
+                        text="upload files",
+                        blocks=[{
+                            "type": "section",
+                            "text": { "type": "mrkdwn", "text": msg},
+                            "accessory": {"type": "button",
+                                        "text": {"type": "plain_text",
+                                                "text": "Yes"},
+                                        "action_id": "files_button",
+                                        "value" : msg_timestamp}}])
             else:
                 # Send message instructing users to use the proper command
                 # or use a thread for discussion
@@ -489,8 +499,11 @@ def create_handlers(bot: SlackBot) -> None:
         options_block = view['blocks'][2]
         view['blocks'] = []
 
+        channel_bot_info = bot.get_channel_llm_info(channel_id)
         files_name_list = [f['name'] for f in files]
         for i, _file in enumerate(files_name_list):
+            if _file in channel_bot_info['files']: # file already uploaded
+                continue
             new_block = copy.deepcopy(extra_context_block)
             new_block['block_id'] = f"extra_context_{i}"
             new_block['element']['action_id'] = f"extra_context_{i}"

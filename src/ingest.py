@@ -4,7 +4,6 @@
 from typing import List, Optional
 from dotenv import load_dotenv
 from typing import (Dict, Any)
-
 from langchain.document_loaders import (
     CSVLoader,
     PyMuPDFLoader,
@@ -13,12 +12,12 @@ from langchain.document_loaders import (
     UnstructuredWordDocumentLoader,
     TextLoader
 )
-
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-
 from langchain.docstore.document import Document
 import requests
 from pathlib import Path
+import os
+import glob
 
 load_dotenv()
 
@@ -118,3 +117,16 @@ def process_uploaded_files(files: Dict[str, Any],
                                   extra_separators=extra_separators)  
         all_texts.extend(texts) 
     return all_texts
+
+def does_vectorstore_exist(persist_directory: str) -> bool:
+    """
+    Checks if vectorstore exists
+    """
+    if os.path.exists(os.path.join(persist_directory, 'index')):
+        if os.path.exists(os.path.join(persist_directory, 'chroma-collections.parquet')) and os.path.exists(os.path.join(persist_directory, 'chroma-embeddings.parquet')):
+            list_index_files = glob.glob(os.path.join(persist_directory, 'index/*.bin'))
+            list_index_files += glob.glob(os.path.join(persist_directory, 'index/*.pkl'))
+            # At least 3 documents are needed in a working vectorstore
+            if len(list_index_files) > 3:
+                return True
+    return False
