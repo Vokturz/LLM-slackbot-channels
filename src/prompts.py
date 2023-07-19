@@ -31,15 +31,11 @@ AGENT_PROMPT = INITIAL_BOT_PROMPT + """
 Given a conversation between users (identified as {users}) and you (identified by \"AI\"), and a follow up message, you must answer as best as you can.
 Your final answer must be in the same language used in the conversation.
 
-TOOLS:
-------
-
 You have access to the following tools:
 
 {tools}
 
 To use a tool, please use the following format:
-
 ```
 Message: the input question/request you must answer
 Thought: you should always think about what to do
@@ -49,8 +45,28 @@ Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer based on my observation
 Final Answer: the final answer to the original input message
+```
 
 Begin! Remember, your final answer must be in the same language used in the original message.
+
+Chat history:
+{chat_history}
+Message: {input}
+Thought: {agent_scratchpad}"""
+
+AGENT_PROMPT_NO_TOOLS = INITIAL_BOT_PROMPT + """
+Given a conversation between users (identified as {users}) and you (identified by \"AI\"), and a follow up message, you must answer as best as you can.
+Your final answer must be in the same language used in the conversation.
+
+
+```
+Message: the input question/request you must answer
+Thought: you should always think about what to do
+Final Answer: the final answer to the original input message
+```
+
+Begin! Remember, your final answer must be in the same language used in the original message.
+
 
 Chat history:
 {chat_history}
