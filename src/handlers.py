@@ -548,9 +548,9 @@ def create_handlers(bot: SlackBot) -> None:
             # remove temp files dict
             bot.store_files_dict(msg_timestamp, None)
 
-            thread = threading.Thread(target=bot.define_thread_retriever_db,
-                                      args=(channel_id, msg_timestamp, texts,
-                                            file_name_list, extra_context))
+            thread = threading.Thread(target=bot.define_retriever_db,
+                                      args=(channel_id, texts, file_name_list, 
+                                            msg_timestamp,extra_context))
             thread.start()
 
     @bot.app.action("unused_action")

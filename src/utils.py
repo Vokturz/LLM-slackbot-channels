@@ -250,7 +250,7 @@ async def get_llm_reply(bot: SlackBot,
         # generate response
         if qa_prompt:
             # is a QA question, requires context
-            db_path = bot.get_thread_retriever_db_path(parsed_body['channel_id'],
+            db_path = bot.get_retriever_db_path(parsed_body['channel_id'],
                                                         first_ts)
             vectorstore = Chroma(persist_directory=db_path,
                                  embedding_function=bot.embeddings,
@@ -364,7 +364,7 @@ async def get_agent_reply(bot: SlackBot,
         if first_ts:
             # is a QA question
             try:
-                db_path = bot.get_thread_retriever_db_path(parsed_body['channel_id'],
+                db_path = bot.get_retriever_db_path(parsed_body['channel_id'],
                                                                 first_ts)
                 vectorstore = Chroma(persist_directory=db_path,
                                     embedding_function=bot.embeddings,

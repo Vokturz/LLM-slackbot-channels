@@ -17,7 +17,6 @@ from langchain.tools import BaseTool
 import glob
 from chromadb.config import Settings
 
-VStore = Chroma
 
 current_directory = os.path.dirname(os.path.abspath(__file__))
 llm_info_file = f'{current_directory}/../data/channels_llm_info.json'
@@ -116,15 +115,6 @@ class SlackBot:
 
         self.tools = tools
         self.tool_names = [tool.name for tool in tools]
-        logger.info("Loading Thread Retrievers locations..")
-        thread_retriever_db = {}
-        for channel_dir in glob.glob(db_dir + "/[CG]*"):
-            channel_id = channel_dir.split("/")[-1]
-            thread_retriever_db[channel_id] = {}
-            for ts_dir in glob.glob(channel_dir + "/*"):
-                ts_val = ts_dir.split("/")[-1]
-                thread_retriever_db[channel_id][ts_val] = ts_dir
-        self.thread_retriever_db = thread_retriever_db
 
         try:
             psswd = os.environ["PERMISSIONS_PASSWORD"]
@@ -233,33 +223,62 @@ class SlackBot:
         await AsyncSocketModeHandler(self.app, self.app_token).start_async()
         
 
-    def define_thread_retriever_db(self, channel_id: str,
-                                     ts: float, docs : List[Document],
-                                     file_name_list: List[str],
-                                     extra_context: str
+    def define_retriever_db(self, channel_id: str, docs : List[Document],
+                            file_name_list: List[str], ts: Optional[str]='',
+                            extra_context: Optional[str] = None,
+                            user_id: Optional[str] = None
                                      ) -> None:
         """
         Defines the thread retriever docs for a given channel.
 
         Args:
             channel_id: The id of the channel.
-            ts: The timestamp of the thread.
             docs: The documents to store in the vector database.
             file_name_list: The file names of the documents.
+            ts: The timestamp of the thread.
             extra_context: Any extra context to add to the QA thread
         """
-        if channel_id not in self.thread_retriever_db:
-            self.thread_retriever_db[channel_id] = {}
-            if not os.path.exists(f"{db_dir}/{channel_id}"):
-                os.mkdir(f"{db_dir}/{channel_id}")
+        if not os.path.exists(f"{db_dir}/{channel_id}"):
+            os.mkdir(f"{db_dir}/{channel_id}")
         persist_directory = f"{db_dir}/{channel_id}/{ts}"
-        if ts not in self.thread_retriever_db[channel_id]:
+
+        if not os.path.exists(persist_directory):
             os.mkdir(persist_directory)
-            msg = "Creating DB for channel's thread.."
-            init_msg = asyncio.run(self.app.client.chat_postMessage(channel=channel_id,
-                                                    thread_ts=ts,
+            if ts:
+                msg = "Creating DB for channel's thread.."
+                init_msg = asyncio.run(self.app.client.chat_postMessage(channel=channel_id,
+                                                        thread_ts=ts,
+                                                        text=msg))
+            db = Chroma.from_documents(docs, embedding=self.embeddings,
+                                    persist_directory=persist_directory,
+                                    client_settings=Settings(
+                                            chroma_db_impl='duckdb+parquet',
+                                            persist_directory=persist_directory,
+                                            anonymized_telemetry=False
+                                            )
+                                        )
+            db.persist()
+            db = None
+
+            if ts:
+                self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
+                msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
+                msg += f" The files are about {extra_context}"
+                asyncio.run(self.app.client.chat_update(channel=channel_id,
+                                                    ts=init_msg['ts'],
                                                     text=msg))
-            db = VStore.from_documents(docs, embedding=self.embeddings,
+            else:
+                msg = "File added to Channel!"
+                init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
+                                                    user=user_id,
+                                                    text=msg))
+                channel_bot_info = self.channels_llm_info[channel_id]
+                if 'files' not in channel_bot_info:
+                    channel_bot_info['files'] = {}
+                channel_bot_info['files'] = extra_context
+                self.define_channel_llm_info(channel_id, channel_bot_info)
+        else:
+            db = Chroma.from_documents(docs, embedding=self.embeddings,
                                        persist_directory=persist_directory,
                                        client_settings=Settings(
                                             chroma_db_impl='duckdb+parquet',
@@ -267,18 +286,13 @@ class SlackBot:
                                             anonymized_telemetry=False
                                             )
                                         )
+            msg = "Creating DB for channel.."
+            init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
+                                                    user=user_id,
+                                                    text=msg))
             
-            db.persist()
-            db = None
-            self.thread_retriever_db[channel_id][ts] = persist_directory
-            self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
-            msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
-            msg += f" The files are about {extra_context}"
-            asyncio.run(self.app.client.chat_update(channel=channel_id,
-                                                     ts=init_msg['ts'],
-                                                     text=msg))
 
-    def get_thread_retriever_db_path(self, channel_id: str, ts: float
+    def get_retriever_db_path(self, channel_id: str, ts: Optional[float]=''
                                   ) -> VectorStore:
         """
         Retuns the persisted directory of the vector database for a given
@@ -292,7 +306,9 @@ class SlackBot:
             persist_directory: The persisted directory of the vector database
                                corresponding to the channel and thread.
         """
-        persist_directory = self.thread_retriever_db[channel_id][ts]
+
+        
+        persist_directory = f"{db_dir}/{channel_id}/{ts}"
         return persist_directory
     
     def define_channel_llm_info(self, channel_id: str,
