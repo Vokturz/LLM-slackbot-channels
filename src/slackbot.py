@@ -225,7 +225,7 @@ class SlackBot:
 
     def define_retriever_db(self, channel_id: str, docs : List[Document],
                             file_name_list: List[str], ts: Optional[str]='',
-                            extra_context: Optional[str] = None,
+                            extra_context: Dict[str, str] = None,
                             user_id: Optional[str] = None
                                      ) -> None:
         """
@@ -236,7 +236,7 @@ class SlackBot:
             docs: The documents to store in the vector database.
             file_name_list: The file names of the documents.
             ts: The timestamp of the thread.
-            extra_context: Any extra context to add to the QA thread
+            extra_context: Any extra context for each document to add to the QA thread
         """
         if not os.path.exists(f"{db_dir}/{channel_id}"):
             os.mkdir(f"{db_dir}/{channel_id}")
@@ -261,9 +261,10 @@ class SlackBot:
             db = None
 
             if ts:
+                msg_extra_context = ', '.join([extra_context[_file] for _file in extra_context])
                 self.app.logger.info(f"Created DB for channel's thread {channel_id}/{ts}")
                 msg = f"_This is a QA Thread using files `{'` `'.join(file_name_list)}`_."
-                msg += f" The files are about {extra_context}"
+                msg += f" The files are about {msg_extra_context}"
                 asyncio.run(self.app.client.chat_update(channel=channel_id,
                                                     ts=init_msg['ts'],
                                                     text=msg))

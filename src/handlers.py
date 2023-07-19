@@ -7,6 +7,7 @@ import json
 import os
 import re
 import asyncio
+import copy
 from typing import (Dict, Any)
 from langchain.prompts import PromptTemplate
 from slack_bolt import (Say, Respond, Ack)
@@ -472,24 +473,31 @@ def create_handlers(bot: SlackBot) -> None:
                                                           msg_timestamp,
                                                           position=0)
         extra_separators = re.findall(r'!sep=(\S+)', first_message['text'])
-        extra_context = re.sub(r'!sep=\S+', '',first_message['text'])
-        extra_context = extra_context.replace('<@'+bot.bot_user_id+'>', '')
-        extra_context = re.sub(r'\s+', ' ', extra_context).strip()
         
         #Load upload_files_template.json
         with open(f'{current_directory}/payloads/upload_files_template.json', 'r') as f:
             view = json.load(f)
 
-        files_title_list = [f["title"] for f in files]
-        if not extra_context:
-            extra_context = ';'.join(files_title_list)
+        extra_context_block = view['blocks'][0]
+        extra_separators_block = view['blocks'][1]
+        extra_separators_block['element']['initial_value'] = ';'.join(extra_separators)
 
-        # set initial values
-        view["blocks"][0]["element"]["initial_value"] = extra_context
-        view["blocks"][1]["element"]["initial_value"] = ';'.join(extra_separators)
+        options_block = view['blocks'][2]
+        view['blocks'] = []
+
+        files_name_list = [f['name'] for f in files]
+        for i, _file in enumerate(files_name_list):
+            new_block = copy.deepcopy(extra_context_block)
+            new_block['block_id'] = f"extra_context_{i}"
+            new_block['element']['action_id'] = f"extra_context_{i}"
+            new_block['element']['initial_value'] = _file
+            new_block['label']['text'] = f"File '{_file}' is about"
+            view['blocks'].append(new_block)
+        view['blocks'].append(extra_separators_block)
+        view['blocks'].append(options_block)
 
         # add to channel not implemented yet
-        view['blocks'][2]['accessory']['options'].pop()
+        view['blocks'][-1]['accessory']['options'].pop()
 
         # Include channel_id in private_metadata
         view["private_metadata"] =  json.dumps({"channel_id": channel_id,
@@ -512,9 +520,19 @@ def create_handlers(bot: SlackBot) -> None:
         """
         await ack()
 
-        extra_context = (view['state']['values']
-                         ['extra_context']['extra_context']
-                         ['value'])
+        # get temp files dict
+        private_metadata = json.loads(view["private_metadata"])
+        channel_id = private_metadata["channel_id"]
+        msg_timestamp = private_metadata['ts']
+
+        files = bot.get_stored_files_dict(msg_timestamp)
+        file_name_list = [f["name"] for f in files]
+
+        extra_context = {}
+        for i, _file in enumerate(file_name_list):
+            extra_context[_file] = (view['state']['values']
+                                    [f'extra_context_{i}'][f'extra_context_{i}']
+                                    ['value'])
         extra_separators = (view['state']['values']
                             ['extra_separators']['extra_separators']
                             ['value'])
@@ -525,14 +543,6 @@ def create_handlers(bot: SlackBot) -> None:
         selected_option = (view['state']['values']
                            ['radio_buttons']['unused_action']
                            ['selected_option']['value'])
-        private_metadata = json.loads(view["private_metadata"])
-        channel_id = private_metadata["channel_id"]
-        msg_timestamp = private_metadata['ts']
-
-        # get temp files dict
-        files = bot.get_stored_files_dict(msg_timestamp)
-
-        file_name_list = [f["name"] for f in files]
 
         if selected_option == 'to_channel':
             bot.app.logger.info('Files uploaded to channel')
@@ -550,7 +560,7 @@ def create_handlers(bot: SlackBot) -> None:
 
             thread = threading.Thread(target=bot.define_retriever_db,
                                       args=(channel_id, texts, file_name_list, 
-                                            msg_timestamp,extra_context))
+                                            msg_timestamp, extra_context))
             thread.start()
 
     @bot.app.action("unused_action")

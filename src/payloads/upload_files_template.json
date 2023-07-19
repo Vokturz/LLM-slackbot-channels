@@ -18,12 +18,11 @@
 			},
 			"label": {
 				"type": "plain_text",
-				"text": "The files are about",
-				"emoji": true
+				"text": "File is about"
 			},
 			"hint": {
 				"type": "plain_text",
-				"text": "Extra context about files. It improves the search over the documents"
+				"text": "Extra context about the file. It improves the search over the documents"
 			}
 		},
 		{
