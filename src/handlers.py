@@ -127,7 +127,11 @@ def create_handlers(bot: SlackBot) -> None:
 
         # Tools
         all_options = []
-        for tool in bot.tool_names:
+        tool_names = bot.tool_names.copy()
+        if 'files' in channel_bot_info and channel_bot_info['files']:
+            tool_names.append('doc_retriever')
+
+        for tool in tool_names:
             option = {
 						"text": {
 							"type": "plain_text",
@@ -136,6 +140,7 @@ def create_handlers(bot: SlackBot) -> None:
 						"value": tool
 					}
             all_options.append(option)
+
         view["blocks"][5]["element"]["options"] = all_options
 
         # Include channel_id in private_metadata
@@ -148,7 +153,7 @@ def create_handlers(bot: SlackBot) -> None:
 
         initial_options = []
         for tool in channel_bot_info['tool_names']:
-            if tool in bot.tool_names:
+            if tool in tool_names:
                 option = {
                             "text": {
                                 "type": "plain_text",
@@ -170,17 +175,16 @@ def create_handlers(bot: SlackBot) -> None:
         Handle the modify_bot view.
         """
         values = view['state']['values']
-        bot_values = {'personality': '',
-                      'instructions': '',
-                      'temperature' : ''
-                      }
+        
         
         # Extract channel ID and user ID
         channel_id = json.loads(view["private_metadata"])["channel_id"]
         notify = json.loads(view["private_metadata"])["notify"]
         user = body['user']['id']
+
+        bot_values = copy.deepcopy(bot.get_channel_llm_info(channel_id))
          # Iterate through each bot value and update it
-        for key in bot_values.keys():
+        for key in ['instructions', 'personality', 'temperature']:
             input_value = values[key][key]['value']
 
             # Check if the input value is for temperature and validate it
@@ -217,7 +221,10 @@ def create_handlers(bot: SlackBot) -> None:
                               command: Dict[str, Any]) -> None:
         """
         Handle the /bot_info command.
-        Displays the initial prompt of the bot and its default temperature
+        Displays the initial prompt of the bot, default temperature and if it
+        is used as an agent or a LLM chain.
+        It also displays the tools that the agent can use, and the files that
+        have been uploaded to this channel via the bot.
         """
         await ack()
         channel_id = command['channel_id']
@@ -245,6 +252,11 @@ def create_handlers(bot: SlackBot) -> None:
 
         if bot.model_type == 'openai' and 'openai_model' in bot_info:
             response += (f"\n*OpenAI Model:* _{bot_info['openai_model']}_")
+
+        if 'files' in bot_info and bot_info['files']:
+            files_info = [f"- _{_file}: {context}_" for _file, context in  bot_info['files'].items()]
+            response += (f"\n*Files:*\n " + '\n'.join(files_info))
+
 
         # Send the response to the user
         await respond(text=response)
@@ -334,7 +346,7 @@ def create_handlers(bot: SlackBot) -> None:
                     client = bot.app.client
                     response = await client.conversations_open(users=_user)
                     user_channel = response['channel']['id']
-                    await client.chat_postEphemeral(channel=user_channel ,
+                    await client.chat_postEphemeral(channel=user_channel,
                                                     user=_user,
                                                     text=msg)
         bot.define_allowed_users(allowed_users)
@@ -365,8 +377,10 @@ def create_handlers(bot: SlackBot) -> None:
 
         bot.app.logger.info(f"User {parsed_body['user_id']} mentioned the bot"
                             f" in channel {parsed_body['channel_id']}")
+        
         # Get the bot info asociated with the channel
         channel_id = parsed_body["channel_id"]
+
         # Ensure is only used in channels
         if channel_id[0] not in ['C', 'G']:
             await say(text='Interaction only able in channels.')
@@ -379,47 +393,45 @@ def create_handlers(bot: SlackBot) -> None:
             thread_ts = None
         if thread_ts:
             first_message = await extract_message_from_thread(bot, channel_id,
-                                                             thread_ts, position=0)
+                                                              thread_ts, position=0)
            # Generate the prompt
             if 'files' not in first_message:
                 # Is not a QA thread
                 prompt = PromptTemplate.from_template(template=prompts.THREAD_PROMPT)
-                if bot.verbose:
-                    bot.app.logger.info(f"Asking thread"
-                                        f" {channel_id}/{first_message['ts']}:"
-                                        f" {parsed_body['query']}")
                 qa_prompt = None
+                extra_context = ''
+                qa_thread = False
             else:
                 # Is a QA thread
+                qa_thread=True
+                
                 prompt = PromptTemplate.from_template(template=prompts.CONDENSE_QUESTION_PROMPT)
                 qa_prompt = PromptTemplate.from_template(template=prompts.QA_PROMPT)
 
                  # Bot message as extra context
                 second_message = await extract_message_from_thread(bot, channel_id,
-                                                                 thread_ts, position=1)
+                                                                  thread_ts, position=1)
                 extra_context = second_message['text']
                 qa_prompt = qa_prompt.partial(extra_context=extra_context)
-                if bot.verbose:
-                    bot.app.logger.info(f"Asking inside a Thread. "
-                                        f" {extra_context}:"
-                                        f" {channel_id}/{first_message['ts']}:"
-                                        f" {parsed_body['query']}")
-                    
+            if bot.verbose:
+                bot.app.logger.info(f"Asking inside a Thread. "
+                                    f" {extra_context} - "
+                                    f" {channel_id}/{first_message['ts']}:"
+                                    f" {parsed_body['query']}")
+                
             # Get reply and update initial message
             channel_bot_info = bot.get_channel_llm_info(channel_id)
             if channel_bot_info['as_agent']:
-                response, initial_ts = await get_agent_reply(bot,parsed_body, first_message['ts'])
+                response, initial_ts = await get_agent_reply(bot, parsed_body, thread_ts,
+                                                             qa_thread)
             else:
                 response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
-                                                        first_ts=first_message['ts'],
-                                                        qa_prompt=qa_prompt)
+                                                           first_ts=thread_ts,
+                                                           qa_prompt=qa_prompt)
 
             client = bot.app.client
-            await client.chat_update(
-                    channel=channel_id,
-                    ts=initial_ts,
-                    text=response
-                )
+            await client.chat_update(channel=channel_id, ts=initial_ts,
+                                     text=response)
         else:
             if "files" in body['event'].keys():
                 files =  body['event']['files']
@@ -458,6 +470,7 @@ def create_handlers(bot: SlackBot) -> None:
         """
         await ack()
         channel_id = body['container']['channel_id']
+        user_id = body['user']['id']
         msg_timestamp = body['actions'][0]['value']
         files = bot.get_stored_files_dict(msg_timestamp)
         first_message = await extract_message_from_thread(bot, channel_id,
@@ -487,12 +500,10 @@ def create_handlers(bot: SlackBot) -> None:
         view['blocks'].append(extra_separators_block)
         view['blocks'].append(options_block)
 
-        # add to channel not implemented yet
-        view['blocks'][-1]['accessory']['options'].pop()
-
         # Include channel_id in private_metadata
         view["private_metadata"] =  json.dumps({"channel_id": channel_id,
-                                                "ts": msg_timestamp})
+                                                "ts": msg_timestamp,
+                                                "user_id": user_id})
         trigger_id = body["trigger_id"]
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
 
@@ -512,9 +523,10 @@ def create_handlers(bot: SlackBot) -> None:
         await ack()
 
         # get temp files dict
-        private_metadata = json.loads(view["private_metadata"])
-        channel_id = private_metadata["channel_id"]
+        private_metadata = json.loads(view['private_metadata'])
+        channel_id = private_metadata['channel_id']
         msg_timestamp = private_metadata['ts']
+        user_id = private_metadata['user_id']
 
         files = bot.get_stored_files_dict(msg_timestamp)
         file_name_list = [f["name"] for f in files]
@@ -522,8 +534,10 @@ def create_handlers(bot: SlackBot) -> None:
         extra_context = {}
         for i, _file in enumerate(file_name_list):
             extra_context[_file] = (view['state']['values']
-                                    [f'extra_context_{i}'][f'extra_context_{i}']
+                                    [f'extra_context_{i}']
+                                    [f'extra_context_{i}']
                                     ['value'])
+            
         extra_separators = (view['state']['values']
                             ['extra_separators']['extra_separators']
                             ['value'])
@@ -535,20 +549,22 @@ def create_handlers(bot: SlackBot) -> None:
                            ['radio_buttons']['unused_action']
                            ['selected_option']['value'])
 
+
+        texts = process_uploaded_files(files, bot_token=bot.bot_token,
+                                       chunk_size=bot.chunk_size,
+                                       chunk_overlap=bot.chunk_overlap,
+                                       extra_separators=extra_separators)
+        bot.store_files_dict(msg_timestamp, None)
+
         if selected_option == 'to_channel':
-            bot.app.logger.info('Files uploaded to channel')
-            pass
+            bot.app.logger.info(f'Uploading files to channel {channel_id}')
+            thread = threading.Thread(target=bot.define_retriever_db,
+                                      args=(channel_id, texts, file_name_list, 
+                                            '', extra_context, user_id))
+            thread.start()
 
         else:
             bot.app.logger.info('Creating a QA thread')
-                 
-            texts = process_uploaded_files(files, bot_token=bot.bot_token,
-                                           chunk_size=bot.chunk_size,
-                                           chunk_overlap=bot.chunk_overlap,
-                                           extra_separators=extra_separators)
-            # remove temp files dict
-            bot.store_files_dict(msg_timestamp, None)
-
             thread = threading.Thread(target=bot.define_retriever_db,
                                       args=(channel_id, texts, file_name_list, 
                                             msg_timestamp, extra_context))

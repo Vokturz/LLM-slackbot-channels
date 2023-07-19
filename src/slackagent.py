@@ -2,10 +2,10 @@ from langchain.tools import BaseTool
 from langchain.agents import AgentExecutor, LLMSingleActionAgent, AgentOutputParser
 from langchain import LLMChain
 from langchain.prompts import StringPromptTemplate
-from typing import List, Union, Any
+from typing import List, Union, Any, Optional
 from langchain.schema import AgentAction, AgentFinish, OutputParserException
 from langchain.llms.base import LLM
-from .prompts import AGENT_PROMPT
+from .prompts import AGENT_PROMPT, AGENT_PROMPT_NO_TOOLS
 from .slackbot import SlackBot
 import asyncio
 import re
@@ -22,7 +22,7 @@ class CustomPromptTemplate(StringPromptTemplate):
     # Instructions for the bot
     instructions: str
     # The list of tools available
-    tools: List[BaseTool]
+    tools: Optional[List[BaseTool]]
     # List of users inside the chat as a string
     users : str
     # Chat history as a string
@@ -39,9 +39,10 @@ class CustomPromptTemplate(StringPromptTemplate):
         # Set the agent_scratchpad variable to that value
         kwargs["agent_scratchpad"] = thoughts
         # Create a tools variable from the list of tools provided
-        kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
-        # Create a list of tool names for the tools provided
-        kwargs["tool_names"] = ", ".join([tool.name for tool in self.tools])
+        if self.tools:
+            kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
+            # Create a list of tool names for the tools provided
+            kwargs["tool_names"] = ", ".join([tool.name for tool in self.tools])
         kwargs["users"] = self.users
         kwargs["chat_history"] = self.chat_history
         kwargs["personality"] = self.personality
@@ -79,10 +80,9 @@ class CustomOutputParser(AgentOutputParser):
                                     ts=self.initial_ts, 
                                     text=msg + "... :hourglass_flowing_sand:"))
         except Exception as e:
-            self.bot.app.logger.error(f'SlackAgentCannot update the message: {e}')
+            self.bot.app.logger.error(f'SlackAgent Cannot update the message: {e}')
         
         return AgentAction(action.strip(), action_input.strip(" ").strip('"'), text)
-    
 
 def slack_agent(bot: SlackBot, llm: LLM, personality: str,
                 instructions: str, users: str, chat_history: str,
@@ -105,7 +105,7 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
         agent_executor: The agent executor
     """
     prompt = CustomPromptTemplate(
-        template=AGENT_PROMPT,
+        template=AGENT_PROMPT if tools else AGENT_PROMPT_NO_TOOLS,
         personality=personality,
         instructions=instructions,
         tools=tools,

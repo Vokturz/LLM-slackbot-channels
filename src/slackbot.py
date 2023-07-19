@@ -108,6 +108,11 @@ class SlackBot:
                     channels_llm_info[channel_id]['tool_names'] = []
                 if 'as_agent' not in channels_llm_info[channel_id]:
                     channels_llm_info[channel_id]['as_agent'] = False
+                if 'files' in channels_llm_info[channel_id]:
+                    db_path = f"{db_dir}/{channel_id}/chroma-collections.parquet"
+                    print(db_path)
+                    if not os.path.isfile(db_path): # No db exists
+                        del channels_llm_info[channel_id]['files']
             self.channels_llm_info = channels_llm_info
 
         else:
@@ -254,13 +259,12 @@ class SlackBot:
             init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
                                                 user=user_id,
                                                 text=msg))
+        chroma_settings = Settings(chroma_db_impl='duckdb+parquet',
+                                   persist_directory=persist_directory,
+                                   anonymized_telemetry=False)
         db = Chroma.from_documents(docs, embedding=self.embeddings,
                                 persist_directory=persist_directory,
-                                client_settings=Settings(
-                                        chroma_db_impl='duckdb+parquet',
-                                        persist_directory=persist_directory,
-                                        anonymized_telemetry=False
-                                        )
+                                client_settings=chroma_settings
                                     )
         db.persist()
         db = None

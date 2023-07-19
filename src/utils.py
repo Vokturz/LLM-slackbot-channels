@@ -70,10 +70,10 @@ def parse_format_body(body: Dict[str, Any],
 async def prepare_messages_history(
         bot: SlackBot,
         parsed_body: Dict[str, Union[str, float]],
+        first_ts: Optional[str],
         to_chain: Dict[str, Any],
         qa_prompt : Optional[PromptTemplate]
-        ) -> Tuple[Dict[str, Any], Optional[float],
-                   Optional[PromptTemplate],str]:
+        ) -> Tuple[Dict[str, Any], Optional[PromptTemplate], str]:
     """
     If it is a thread, prepare the message history to be sent to the bot.
 
@@ -81,6 +81,7 @@ async def prepare_messages_history(
         bot: The Slackbot object.
         parsed_body: The relevant information from the body obtained from
                      parse_format_body.
+        first_ts: The timestamp of the first message (if it is a thread).
         to_chain: A dictionary containing the varoables to be used in the chain.
         qa_prompt: The QA PromptTemplate object.
     
@@ -88,22 +89,19 @@ async def prepare_messages_history(
         to_chain: A dictionary containing the variables to be used in the chain.
                   The chat history and list of users in the conversartion are
                   added to this dictionary.
-        thread_ts: The thread timestamp.
         qa_prompt: The QA PromptTemplate object partially formatted.
         warning_msg: A warning message about the tokens limit.
     """
-    if 'thread_ts' not in parsed_body.keys():
+    if not first_ts:
         to_chain['query'] = parsed_body['query']
-        thread_ts = None
         warning_msg = ""
         if bot.get_channel_llm_info(parsed_body['channel_id'])['as_agent']:
             to_chain['chat_history'] = ""
             to_chain['users'] = f"<@{parsed_body['user_id']}>"
     else:
-        thread_ts = parsed_body['thread_ts']
         messages_history, users = await extract_thread_conversation(bot,
                                                                     parsed_body['channel_id'],
-                                                                    thread_ts)
+                                                                    first_ts)
         messages_history, warning_msg = custom_token_memory(bot, messages_history)
         
         if qa_prompt:
@@ -111,7 +109,7 @@ async def prepare_messages_history(
             messages_history = messages_history[2:-1]
         to_chain['chat_history'] = '\n'.join(messages_history).replace('\n\n', '\n')
         to_chain['users'] = ' '.join(list(users))
-    return to_chain, thread_ts, qa_prompt, warning_msg
+    return to_chain, qa_prompt, warning_msg
 
 async def send_initial_message(bot: SlackBot,
                                parsed_body: Dict[str, Union[str, float]],
@@ -213,13 +211,13 @@ async def get_llm_reply(bot: SlackBot,
     to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions']}
 
     # format prompt and get thread timestamp
-    (to_chain, thread_ts,
-      qa_prompt,warning_msg) = await prepare_messages_history(bot,
-                                                              parsed_body,
-                                                              to_chain,
-                                                              qa_prompt)
+    (to_chain, qa_prompt, warning_msg) = await prepare_messages_history(bot,
+                                                            parsed_body,
+                                                            first_ts,
+                                                            to_chain,
+                                                            qa_prompt)
     # send initial message
-    initial_ts = await send_initial_message(bot, parsed_body, thread_ts)
+    initial_ts = await send_initial_message(bot, parsed_body, first_ts)
     
     if parsed_body['from_command']:
         initial_msg = f"*<@{parsed_body['user_id']}> asked*: {parsed_body['query']}\n"
@@ -243,7 +241,7 @@ async def get_llm_reply(bot: SlackBot,
         temp = adjust_llm_temperature(llm, parsed_body)
 
         if bot.model_type == 'fakellm':
-            await asyncio.sleep(10)
+            await asyncio.sleep(5)
 
         if bot.verbose:
             bot.app.logger.info('Getting response..')
@@ -301,16 +299,17 @@ async def get_llm_reply(bot: SlackBot,
 async def get_agent_reply(bot: SlackBot, 
                           parsed_body: Dict[str, Union[str, float]],
                           first_ts : Optional[float]=None,
+                          qa_thread : Optional[bool]=False
                           ) -> Tuple[str, Optional[str]]:
     """
-    Generate a response using the bot's language model, given a prompt and
-    a parsed request data.
+    Generate a response using the bot's language model as an agent
 
     Args:
         bot: The Slackbot object.
-        prompt: A PromptTemplate object containing the LLM prompt to be used.
         parsed_body: The relevant information from the body obtained from
                      parse_format_body.
+        first_ts: The timestamp of the first message sent in the conversation.
+        qa_thread: Whether it is a QA thread or not.
 
     Returns:
         response: The generated response from the LLM.
@@ -321,17 +320,17 @@ async def get_agent_reply(bot: SlackBot,
     llm = bot.get_llm_by_channel(channel_id=parsed_body['channel_id'])
 
     # dictionary to format the prompt inside the chain
-    to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions', 'tool_names']}
+    agent_info = {k: channel_llm_info[k] for k in ['personality', 'instructions', 'tool_names']}
 
     # format prompt and get thread timestamp
-    (to_chain, thread_ts,
-      _, warning_msg) = await prepare_messages_history(bot,
-                                                       parsed_body,
-                                                       to_chain,
-                                                       None)
+    (agent_info, _, warning_msg) = await prepare_messages_history(bot,
+                                                        parsed_body,
+                                                        first_ts,
+                                                        agent_info,
+                                                        None)
     
     # send initial message
-    initial_ts = await send_initial_message(bot, parsed_body, thread_ts)
+    initial_ts = await send_initial_message(bot, parsed_body, first_ts)
     
     if parsed_body['from_command']:
         initial_msg = f"*<@{parsed_body['user_id']}> asked*: {parsed_body['query']}\n"
@@ -355,46 +354,38 @@ async def get_agent_reply(bot: SlackBot,
         temp = adjust_llm_temperature(llm, parsed_body)
 
         if bot.model_type == 'fakellm':
-            await asyncio.sleep(10)
+            await asyncio.sleep(5)
 
         if bot.verbose:
             bot.app.logger.info('Getting response..')
         
-        to_chain['tools'] = bot.get_tools_by_names(to_chain['tool_names'])
-        if first_ts:
-            # is a QA question
+        agent_info['tools'] = bot.get_tools_by_names(agent_info['tool_names'])
+
+
+        if first_ts and qa_thread:
+             # Only files uploaded to this thread
             try:
-                db_path = bot.get_retriever_db_path(parsed_body['channel_id'],
-                                                                first_ts)
-                vectorstore = Chroma(persist_directory=db_path,
-                                    embedding_function=bot.embeddings,
-                                    client_settings=Settings(
-                                                chroma_db_impl='duckdb+parquet',
-                                                persist_directory=db_path,
-                                                anonymized_telemetry=False)
-                                    )
-                qa_chain = RetrievalQA.from_chain_type(
-                    llm=llm, chain_type="stuff",
-                    retriever=vectorstore.as_retriever(kwargs={'k': bot.k_similarity})
-                )
-                second_message = await extract_message_from_thread(bot, parsed_body['channel_id'],
-                                                                thread_ts, position=1)
-                extra_context = re.search("The files are about (.*)", second_message['text']).group(1)
-                doc_retriever = [Tool(name="doc_retriever",
-                                    func=qa_chain.run,
-                                    coroutine=qa_chain.arun,
-                                    description=f"useful for when you need to answer questions about {extra_context}.",
-                                    )]
-                to_chain['tools'].extend(doc_retriever)
+                doc_retriever = await get_doc_retriever_tool(bot, llm, parsed_body,
+                                                       first_ts)
+                agent_info['tools'].extend(doc_retriever) 
             except KeyError:
                 bot.app.logger.info('There are no documents for this thread')
-
+        else:
+            # All files uploaded to the channel via the bot
+            # Only if the tool is included in the tools to use
+            if 'doc_retriever' in agent_info['tool_names']:
+                try:
+                    doc_retriever = await get_doc_retriever_tool(bot, llm, parsed_body)   
+                    agent_info['tools'].extend(doc_retriever)
+                except Exception as e:
+                    bot.app.logger.info(e) 
+        
         from .slackagent import slack_agent
-        executor_agent = slack_agent(bot, llm, personality=to_chain['personality'],
-                                    instructions=to_chain['instructions'],
-                                    users=to_chain['users'],
-                                    chat_history=to_chain['chat_history'],
-                                    tools=to_chain['tools'],
+        executor_agent = slack_agent(bot, llm, personality=agent_info['personality'],
+                                    instructions=agent_info['instructions'],
+                                    users=agent_info['users'],
+                                    chat_history=agent_info['chat_history'],
+                                    tools=agent_info['tools'],
                                     initial_ts=initial_ts,
                                     channel_id=parsed_body['channel_id']) 
         try: 
@@ -526,3 +517,55 @@ def custom_token_memory(bot: SlackBot,
                            f" first {n_removed} messages were removed._")
             bot.app.logger.warning(warning_msg)
     return messages_history, warning_msg
+
+async def get_doc_retriever_tool(bot: SlackBot, llm: LLM, 
+                                 parsed_body: Dict[str, Union[str, float]],
+                                 first_ts : Optional[str]='') -> Tool:
+    """
+    Create and return a doc_retriever tool, which can be used to retrieve
+    information from documents
+
+    Args:
+        bot: The Slackbot object.
+        llm: The LLM to be used in the RetrievalQA
+        parsed_body: The relevant information from the body obtained from
+                     parsed_format_body.
+        first_ts: The timestamp of the initial message of a thread. If it is
+                  empty, then the tool is build using the documents uploaded
+                  to the bot via the channel.
+
+    Returns:
+        doc_retriever: The doc_retriever tool.
+    """
+    db_path = bot.get_retriever_db_path(parsed_body['channel_id'],
+                                                    first_ts)
+    vectorstore = Chroma(persist_directory=db_path,
+                        embedding_function=bot.embeddings,
+                        client_settings=Settings(
+                                    chroma_db_impl='duckdb+parquet',
+                                    persist_directory=db_path,
+                                    anonymized_telemetry=False)
+                        )
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=llm, chain_type="stuff",
+        retriever=vectorstore.as_retriever(kwargs={'k': bot.k_similarity})
+    )
+    
+    if first_ts: # a QA Thread
+        second_message = await extract_message_from_thread(bot, parsed_body['channel_id'],
+                                                            first_ts, position=1)
+        extra_context = re.search("The files are about (.*)", second_message['text']).group(1)
+
+    else: # Directly from the channel
+        channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
+        if not channel_llm_info['files']:
+            raise KeyError('No files found')
+        
+        extra_context = ', '.join(channel_llm_info['files'].values())
+
+    doc_retriever = [Tool(name="doc_retriever",
+                        func=qa_chain.run,
+                        coroutine=qa_chain.arun,
+                        description=f"Useful for when you need to answer questions about {extra_context}.",
+                        )]
+    return doc_retriever
