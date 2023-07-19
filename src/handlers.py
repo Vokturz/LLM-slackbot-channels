@@ -65,6 +65,7 @@ def create_handlers(bot: SlackBot) -> None:
         else:
             await respond(text=response)
 
+
     @bot.app.command("/modify_bot")
     @bot.check_permissions
     async def handle_modify_bot(ack: Ack, body: Dict[str, Any],
@@ -210,6 +211,7 @@ def create_handlers(bot: SlackBot) -> None:
         if notify:
             await say(f'_*<@{user}> has modified the bot info*_', channel=channel_id)
 
+
     @bot.app.command("/bot_info")
     async def handle_bot_info(ack: Ack, respond: Respond,
                               command: Dict[str, Any]) -> None:
@@ -246,6 +248,7 @@ def create_handlers(bot: SlackBot) -> None:
 
         # Send the response to the user
         await respond(text=response)
+
 
     @bot.app.command("/permissions") # Don't ask for allowed_users
     async def handle_permissions(ack: Ack, body: Dict[str, Any],
@@ -337,7 +340,6 @@ def create_handlers(bot: SlackBot) -> None:
         bot.define_allowed_users(allowed_users)
 
 
-        
     @bot.app.event("app_mention")
     @bot.check_permissions
     async def handle_mention(say: Say, 
@@ -427,31 +429,20 @@ def create_handlers(bot: SlackBot) -> None:
                 bot.store_files_dict(msg_timestamp, files)
 
                 # Sent a temporary message
+                msg = ("Hey! looks like you have uploaded some files. Do you "
+                      "want to interact with them?")
                 await bot.app.client.chat_postEphemeral(
                     user=body['event']['user'],
-                        channel=channel_id,
-                        text="upload files",
-                        blocks=[
-                            {
-                                "type": "section",
-                                "text": {
-                                    "type": "mrkdwn",
-                                    "text": "Hey! looks like you have uploaded some files."
-                                            " Do you want to interact with them?"
-                                },
-                                "accessory": {
-                                    "type": "button",
-                                    "text": {
-                                        "type": "plain_text",
-                                        "text": "Yes"
-                                    },
-                                    "action_id": "files_button",
-                                    "value" : msg_timestamp
-                                }
-                            }
-                        ]
-                    )
-
+                    channel=channel_id,
+                    text="upload files",
+                    blocks=[{
+                        "type": "section",
+                        "text": { "type": "mrkdwn", "text": msg},
+                        "accessory": {"type": "button",
+                                      "text": {"type": "plain_text",
+                                               "text": "Yes"},
+                                      "action_id": "files_button",
+                                      "value" : msg_timestamp}}])
             else:
                 # Send message instructing users to use the proper command
                 # or use a thread for discussion
