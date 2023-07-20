@@ -118,15 +118,16 @@ create_handlers(bot)
 
 ## Slack API configuration
 The bot requires the following permissions:
-1. Activate **Incoming Webhooks**
-2. Create **Slash Commands**
+1. Enable **Socket Mode**
+2. Activate **Incoming Webhooks**
+3. Create **Slash Commands**
    - `/ask` Ask a question or make a request
    - `/modify_bot` Modify bot's configuration for the current channel 
    - `/bot_info` Get *prompt* and *temperature* of the bot in the current channel
    - `/permissions` (optional)  Modify which users can interact with the bot
-3. Enable **Events**
+4. Enable **Events**
    - Subscribe to `app_mention`
-4. Set **Scopes**
+5. Set **Scopes**
    - `app_mention:read`
    - `channels:history`
    - `channels:join`
