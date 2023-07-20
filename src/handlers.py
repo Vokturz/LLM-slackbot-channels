@@ -449,7 +449,7 @@ def create_handlers(bot: SlackBot) -> None:
                 file_name_list = [f["name"] for f in files]
 
                 for i, _file in enumerate(file_name_list):
-                    if _file in channel_bot_info['files']:
+                    if 'files' in channel_bot_info and _file in channel_bot_info['files']:
                         bot.app.logger.info(f"File '{_file}' already in channel {channel_id}")
                         msg += f"\n-_*{_file}* already exists._"
                         del files[i]
@@ -507,7 +507,8 @@ def create_handlers(bot: SlackBot) -> None:
         channel_bot_info = bot.get_channel_llm_info(channel_id)
         files_name_list = [f['name'] for f in files]
         for i, _file in enumerate(files_name_list):
-            if _file in channel_bot_info['files']: # file already uploaded
+            if 'files' in channel_bot_info and _file in channel_bot_info['files']:
+                # file already uploaded
                 continue
             new_block = copy.deepcopy(extra_context_block)
             new_block['block_id'] = f"extra_context_{i}"
