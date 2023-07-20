@@ -361,6 +361,10 @@ class SlackBot:
             self.define_channel_llm_info(channel_id, self.default_llm_info) 
 
         channel_llm_info = self.channels_llm_info[channel_id]
+
+        if (self.model_type == 'openai' and 
+            'openai_model' not in channel_llm_info):
+            channel_llm_info = channel_llm_info['openai_model']
         return channel_llm_info
     
     def define_allowed_users(self, users_list: List[str]) -> None:
