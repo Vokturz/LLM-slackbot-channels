@@ -190,6 +190,7 @@ class SlackBot:
                 self.llm = OpenAI(**config, **kwargs)
             # self.llm = OpenAI(callbacks=[handler], **config)
             
+            self.default_openai_model = config["model_name"]
             for channel_id in self.channels_llm_info:
                 if 'openai_model' not in self.channels_llm_info[channel_id]:
                         self.channels_llm_info[channel_id]['openai_model'] = config["model_name"]
@@ -387,7 +388,12 @@ class SlackBot:
         """
         channel_llm_info = self.get_channel_llm_info(channel_id)
         if self.model_type == 'openai':
-            config = dict(model_name=channel_llm_info['openai_model'],
+
+            if 'openai_model' not in channel_llm_info:
+                model_name = self.default_openai_model 
+            else:
+                model_name = channel_llm_info['openai_model']
+            config = dict(model_name=model_name,
                            temperature=channel_llm_info['temperature'],
                            max_tokens=self.max_tokens)
             if config["model_name"].startswith("gpt"):
