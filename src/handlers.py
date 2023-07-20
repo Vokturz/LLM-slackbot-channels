@@ -165,6 +165,10 @@ def create_handlers(bot: SlackBot) -> None:
         if initial_options:
             view["blocks"][5]["element"]["initial_options"] = initial_options
 
+        if not all_options:
+            view["blocks"][5] = { "type": "section",
+                                  "text": { "type": "plain_text", "text": " "}}
+            
         # Open view for bot modification
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
         
@@ -203,9 +207,10 @@ def create_handlers(bot: SlackBot) -> None:
         as_agent = values['use_it_as']['unused_action']['selected_option']['value']
         bot_values['as_agent'] = True if 'as_agent' == as_agent else False
  
-        selected_tools = values['tool_names']['unused_action']['selected_options']
-        tool_names = [tool['value'] for tool in selected_tools]
-        bot_values['tool_names'] = tool_names
+        if bot.tool_names:
+            selected_tools = values['tool_names']['unused_action']['selected_options']
+            tool_names = [tool['value'] for tool in selected_tools]
+            bot_values['tool_names'] = tool_names
 
         # Update channel's bot info
         bot.define_channel_llm_info(channel_id, bot_values)
