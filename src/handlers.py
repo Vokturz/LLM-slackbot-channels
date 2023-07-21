@@ -43,10 +43,7 @@ def create_handlers(bot: SlackBot) -> None:
             return
         
         # Generate prompt for the channel
-        prompt = PromptTemplate(template=prompts.DEFAULT_PROMPT,
-                                input_variables=['personality',
-                                                 'instructions',
-                                                 'query'])
+        prompt = PromptTemplate.from_template(template=prompts.DEFAULT_PROMPT)
 
         channel_bot_info = bot.get_channel_llm_info(channel_id)
         # Get the response from the LLM
@@ -406,15 +403,12 @@ def create_handlers(bot: SlackBot) -> None:
                 prompt = PromptTemplate.from_template(template=prompts.THREAD_PROMPT)
                 qa_prompt = None
                 extra_context = ''
-                qa_thread = False
             else:
                 # Is a QA thread
-                qa_thread=True
-                
                 prompt = PromptTemplate.from_template(template=prompts.CONDENSE_QUESTION_PROMPT)
                 qa_prompt = PromptTemplate.from_template(template=prompts.QA_PROMPT)
 
-                 # Bot message as extra context
+                # Bot message as extra context
                 second_message = await extract_message_from_thread(bot, channel_id,
                                                                   thread_ts, position=1)
                 extra_context = second_message['text']
@@ -429,7 +423,7 @@ def create_handlers(bot: SlackBot) -> None:
             
             if channel_bot_info['as_agent']:
                 response, initial_ts = await get_agent_reply(bot, parsed_body, thread_ts,
-                                                             qa_thread)
+                                                             bool(qa_prompt))
             else:
                 response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
                                                            first_ts=thread_ts,
