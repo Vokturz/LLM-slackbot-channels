@@ -112,7 +112,7 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
         tools=tools,
         users=users,
         chat_history=chat_history,
-        input_variables=["input", "intermediate_steps"]
+        input_variables=["question", "intermediate_steps"]
     )
     llm_chain = LLMChain(llm=llm, prompt=prompt)
     if not initial_ts:

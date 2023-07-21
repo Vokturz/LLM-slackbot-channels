@@ -228,24 +228,24 @@ async def get_chain(bot: SlackBot, llm: LLM,
     return chain
 
 
-async def get_llm_reply(bot: SlackBot, 
-                        prompt: PromptTemplate, 
-                        parsed_body: Dict[str, Union[str, float]],
-                        first_ts : Optional[float] = None,
-                        qa_prompt : Optional[PromptTemplate] = None
-                        ) -> Tuple[str, Optional[str]]:
+async def get_reply(bot: SlackBot, 
+                    parsed_body: Dict[str, Union[str, float]],
+                    prompt: PromptTemplate,
+                    qa_prompt : Optional[PromptTemplate] = None,
+                    first_ts : Optional[str] = None,
+                    from_agent: bool = False
+                    ) -> Tuple[str, Optional[str]]:
     """
-    Generate a response using the bot's language model, given a prompt and
-    a parsed request data.
+    Generate a response using a chain or an agent
 
     Args:
         bot: The Slackbot object.
-        prompt: A PromptTemplate object containing the LLM prompt to be used.
         parsed_body: The relevant information from the body obtained from
                      parse_format_body.
-        first_ts: The timestamp of the first message sent in the conversation.
-                  Used only in a QA thread.
+        prompt: A PromptTemplate object containing the LLM prompt to be used.
         qa_prompt: The QA PromptTemplate object.
+        first_ts: The timestamp of the first message sent in the conversation.
+        from_agent: Type of the reply, from an agent or a chain
 
     Returns:
         response: The generated response from the LLM.
@@ -256,24 +256,27 @@ async def get_llm_reply(bot: SlackBot,
 
     # dictionary to format the prompt inside the chain
     to_chain = {k: channel_llm_info[k] for k in ['personality', 'instructions']}
-    if qa_prompt:
-        qa_prompt = qa_prompt.partial(**to_chain)
+    if not from_agent:
+        if qa_prompt:
+            qa_prompt = qa_prompt.partial(**to_chain)
+        else:
+            prompt = prompt.partial(**to_chain)
     else:
-        prompt = prompt.partial(**to_chain)
+        to_chain['tool_names'] = channel_llm_info['tool_names']
+        qa_thread = True if qa_prompt else False
+        qa_prompt = None
 
-    # format prompt and get thread timestamp
-    (to_chain, warning_msg) = await prepare_messages_history(bot,
-                                                            parsed_body,
-                                                            first_ts,
-                                                            to_chain,
-                                                            qa_prompt)
+    # get message history
+    to_chain, warning_msg = await prepare_messages_history(bot, parsed_body,
+                                                           first_ts, to_chain,
+                                                           qa_prompt)
     
     # send initial message
     initial_ts = await send_initial_message(bot, parsed_body, first_ts)
-    
+
     # get callback handlers
-    async_handler, handler = get_callback_handlers(bot, parsed_body, initial_ts)   
-        
+    async_handler, handler = get_callback_handlers(bot, parsed_body, initial_ts)  
+
     # generate response using language model
     llm_call = asyncio.Lock()
     async with llm_call:
@@ -286,134 +289,63 @@ async def get_llm_reply(bot: SlackBot,
         if bot.verbose:
             bot.app.logger.info('Getting response..')
 
-        # generate response
-        # LLMChain or ConversationalRetrievalChain
-        chain = await get_chain(bot, llm, to_chain, parsed_body,
-                                prompt, qa_prompt, first_ts)
         input_dict = {'question': parsed_body['query']}
 
-        if qa_prompt:
-            input_dict['chat_history'] = to_chain['chat_history']
-        try: 
-            resp_llm = await chain.arun(input_dict, callbacks=[async_handler])
-        except NotImplementedError:
-            bot.app.logger.info('No Async generation implemented for this LLM'
-                                ', using Sync mode')
-            resp_llm = chain.run(input_dict, callbacks=[handler])
+        if not from_agent:
+            # LLMChain or ConversationalRetrievalChain
+            executor = await get_chain(bot, llm, to_chain, parsed_body,
+                                    prompt, qa_prompt, first_ts)
+            if qa_prompt:
+                input_dict['chat_history'] = to_chain['chat_history']
 
-        response = resp_llm.strip()
-        final_time = round((time.time() - start_time)/60,2)
-
-    if bot.verbose:
-        #if qa_prompt:
-        #    to_chain["question"] = parsed_body["query"]
-        #n_tokens = llm.get_num_tokens(prompt.format(**to_chain))
-        response += f"\n(_time: `{final_time}` min. `temperature={temp}`_)"
-        bot.app.logger.info(response.replace('\n', ''))
-        response += warning_msg
-    return response, initial_ts
-
-async def get_agent_reply(bot: SlackBot, 
-                          parsed_body: Dict[str, Union[str, float]],
-                          first_ts : Optional[float]=None,
-                          qa_thread : Optional[bool]=False
-                          ) -> Tuple[str, Optional[str]]:
-    """
-    Generate a response using the bot's language model as an agent
-
-    Args:
-        bot: The Slackbot object.
-        parsed_body: The relevant information from the body obtained from
-                     parse_format_body.
-        first_ts: The timestamp of the first message sent in the conversation.
-        qa_thread: Whether it is a QA thread or not.
-
-    Returns:
-        response: The generated response from the LLM.
-        initial_ts: The timestamp of the initial message sent by the bot.
-    """
-    channel_llm_info = bot.get_channel_llm_info(parsed_body['channel_id'])
-
-    llm = bot.get_llm_by_channel(channel_id=parsed_body['channel_id'])
-
-    # dictionary to format the prompt inside the chain
-    agent_info = {k: channel_llm_info[k] for k in ['personality', 'instructions', 'tool_names']}
-
-    # format prompt and get thread timestamp
-    (agent_info, warning_msg) = await prepare_messages_history(bot,
-                                                        parsed_body,
-                                                        first_ts,
-                                                        agent_info,
-                                                        None)
-    
-    # send initial message
-    initial_ts = await send_initial_message(bot, parsed_body, first_ts)
-
-    # get callback handlers
-    async_handler, handler = get_callback_handlers(bot, parsed_body, initial_ts)   
-
-    # generate response using language model
-    llm_call = asyncio.Lock()
-    async with llm_call:
-        start_time = time.time()
-        temp = adjust_llm_temperature(llm, parsed_body)
-
-        if bot.model_type == 'fakellm':
-            await asyncio.sleep(5)
-
-        if bot.verbose:
-            bot.app.logger.info('Getting response..')
-        
-        agent_info['tools'] = bot.get_tools_by_names(agent_info['tool_names'])
-
-        if first_ts and qa_thread:
-             # Only files uploaded to this thread
-            try:
-                doc_retriever = await get_doc_retriever(bot, llm, parsed_body,
-                                                        first_ts)
-                agent_info['tools'].extend(doc_retriever) 
-            except KeyError:
-                bot.app.logger.info('There are no documents for this thread')
         else:
-            # All files uploaded to the channel via the bot
-            # Only if the tool is included in the tools to use
-            if 'doc_retriever' in agent_info['tool_names']:
+            # Agent
+            agent_info = to_chain
+            agent_info['tools'] = bot.get_tools_by_names(agent_info['tool_names'])
+
+            if first_ts and qa_thread:
+                # Only files uploaded to this thread
                 try:
-                    doc_retriever = await get_doc_retriever(bot, llm, parsed_body)   
-                    agent_info['tools'].extend(doc_retriever)
-                except Exception as e:
-                    bot.app.logger.info(e) 
-        
-        from .slackagent import slack_agent
-        executor_agent = slack_agent(bot, llm, personality=agent_info['personality'],
-                                    instructions=agent_info['instructions'],
-                                    users=agent_info['users'],
-                                    chat_history=agent_info['chat_history'],
-                                    tools=agent_info['tools'],
-                                    initial_ts=initial_ts,
-                                    channel_id=parsed_body['channel_id']) 
+                    doc_retriever = await get_doc_retriever(bot, llm, parsed_body,
+                                                            first_ts)
+                    agent_info['tools'].extend(doc_retriever) 
+                except KeyError:
+                    bot.app.logger.info('There are no documents for this thread')
+            else:
+                # All files uploaded to the channel via the bot
+                # Only if the tool is included in the tools to use
+                if 'doc_retriever' in agent_info['tool_names']:
+                    try:
+                        doc_retriever = await get_doc_retriever(bot, llm, parsed_body)   
+                        agent_info['tools'].extend(doc_retriever)
+                    except Exception as e:
+                        bot.app.logger.info(e) 
+            
+            from .slackagent import slack_agent
+            executor = slack_agent(bot, llm, personality=agent_info['personality'],
+                                   instructions=agent_info['instructions'],
+                                   users=agent_info['users'],
+                                   chat_history=agent_info['chat_history'],
+                                   tools=agent_info['tools'],
+                                   initial_ts=initial_ts,
+                                   channel_id=parsed_body['channel_id']) 
+        # Get final response    
         try: 
-            resp_llm = await executor_agent.arun(input=parsed_body['query'], callbacks=[async_handler])
+            resp_llm = await executor.arun(input_dict, callbacks=[async_handler])
         except NotImplementedError:
                 bot.app.logger.info('No Async generation implemented for this LLM'
-                                    ', using concurrent mode')
-                resp_llm = executor_agent.run(input=parsed_body['query'], callbacks=[handler])
-
+                                    ', using sync mode')
+                resp_llm = executor.run(input_dict, callbacks=[handler])
+                
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
 
     if bot.verbose:
-        # from .prompts import AGENT_PROMPT
-        # to_chain["input"] = parsed_body["query"]
-        # to_chain["agent_scratchpad"] = ""
-        # n_tokens =  llm.get_num_tokens(AGENT_PROMPT.format(**to_chain))
-        # n_tokens += 100 # an estimator
         response += f"\n(_time: `{final_time}` min. `temperature={temp}`_)"
         bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
     return response, initial_ts
-
-
+        
 def get_callback_handlers(bot: SlackBot,
                 parsed_body: Dict[str, Union[str, float]],
                 initial_ts: Optional[str]=''

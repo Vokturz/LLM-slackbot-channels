@@ -54,7 +54,7 @@ Begin! Remember, your final answer must be in the same language used in the orig
 
 Chat history:
 {chat_history}
-Message: {input}
+Message: {question}
 Thought: {agent_scratchpad}"""
 
 
@@ -73,5 +73,5 @@ Begin! Remember, your final answer must be in the same language used in the orig
 
 Chat history:
 {chat_history}
-Message: {input}
+Message: {question}
 Thought: {agent_scratchpad}"""

@@ -1,7 +1,6 @@
 from . import prompts
 from .slackbot import SlackBot
-from .utils import (parse_format_body, get_llm_reply,
-                    extract_message_from_thread, get_agent_reply)
+from .utils import (parse_format_body, get_reply, extract_message_from_thread)
 from .ingest import process_uploaded_files
 import json
 import os
@@ -52,11 +51,11 @@ def create_handlers(bot: SlackBot) -> None:
         prompt = PromptTemplate.from_template(template=prompts.DEFAULT_PROMPT)
 
         channel_bot_info = bot.get_channel_llm_info(channel_id)
+
         # Get the response from the LLM
-        if channel_bot_info['as_agent']:
-            response, initial_ts = await get_agent_reply(bot, parsed_body, None)
-        else:
-            response, initial_ts = await get_llm_reply(bot, prompt, parsed_body)
+        response, initial_ts = await get_reply(bot, parsed_body, prompt, 
+                                               None, None,
+                                               channel_bot_info['as_agent'])
         # Format the response
         response = f"*<@{user_id}> asked*: {parsed_body['query']}\n*Answer*:\n{response}"
 
@@ -400,6 +399,7 @@ def create_handlers(bot: SlackBot) -> None:
             parsed_body['thread_ts'] = thread_ts
         except:
             thread_ts = None
+            
         if thread_ts:
             first_message = await extract_message_from_thread(bot, channel_id,
                                                               thread_ts, position=0)
@@ -419,6 +419,7 @@ def create_handlers(bot: SlackBot) -> None:
                                                                   thread_ts, position=1)
                 extra_context = second_message['text']
                 qa_prompt = qa_prompt.partial(extra_context=extra_context)
+                
             if bot.verbose:
                 bot.app.logger.info(f"Asking inside a Thread. "
                                     f" {extra_context} - "
@@ -426,14 +427,9 @@ def create_handlers(bot: SlackBot) -> None:
                                     f" {parsed_body['query']}")
                 
             # Get reply and update initial message
-            
-            if channel_bot_info['as_agent']:
-                response, initial_ts = await get_agent_reply(bot, parsed_body, thread_ts,
-                                                             bool(qa_prompt))
-            else:
-                response, initial_ts = await get_llm_reply(bot, prompt, parsed_body,
-                                                           first_ts=thread_ts,
-                                                           qa_prompt=qa_prompt)
+            response, initial_ts = await get_reply(bot, parsed_body, prompt, 
+                                                qa_prompt, thread_ts,
+                                                channel_bot_info['as_agent'])
 
             client = bot.app.client
             await client.chat_update(channel=channel_id, ts=initial_ts,
