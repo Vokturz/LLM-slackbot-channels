@@ -61,9 +61,9 @@ class CustomOutputParser(AgentOutputParser):
     channel_id: str
 
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
-        if f"Final Answer: " in text:
+        if f"Final Answer:" in text:
             return AgentFinish(
-                {"output": text.split(f"Final Answer: ")[-1].strip()}, text
+                {"output": text.split(f"Final Answer:")[-1].strip()}, text
             )
         regex = r"Action: (.*?)[\n]*Action Input: (.*)"
         match = re.search(regex, text)
@@ -129,5 +129,5 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
     )
     agent_executor = (AgentExecutor
                       .from_agent_and_tools(agent=agent, tools=tools, verbose=bot.verbose,
-                       handle_parsing_errors=True))
+                       handle_parsing_errors="Check your output and make sure it conforms! a final response MUST starts with \"Final Answer:\""))
     return agent_executor

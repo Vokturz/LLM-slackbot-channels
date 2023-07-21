@@ -74,7 +74,8 @@ async def prepare_messages_history(
         parsed_body: Dict[str, Union[str, float]],
         first_ts: Optional[str],
         to_chain: Dict[str, Any],
-        qa_prompt : Optional[PromptTemplate]
+        qa_prompt : Optional[PromptTemplate],
+        from_agent: bool = False
         ) -> Tuple[Dict[str, Any], Optional[PromptTemplate], str]:
     """
     If it is a thread, prepare the message history to be sent to the bot.
@@ -86,7 +87,7 @@ async def prepare_messages_history(
         first_ts: The timestamp of the first message (if it is a thread).
         to_chain: A dictionary containing the varoables to be used in the chain.
         qa_prompt: The QA PromptTemplate object.
-    
+        from_agent: Whether the message will be sent by an agent or not.
     Returns:
         to_chain: A dictionary containing the variables to be used in the chain.
                   The chat history and list of users in the conversartion are
@@ -96,7 +97,7 @@ async def prepare_messages_history(
     if not first_ts:
         to_chain['query'] = parsed_body['query']
         warning_msg = ""
-        if bot.get_channel_llm_info(parsed_body['channel_id'])['as_agent']:
+        if from_agent:
             to_chain['chat_history'] = ""
             to_chain['users'] = f"<@{parsed_body['user_id']}>"
     else:
@@ -107,6 +108,8 @@ async def prepare_messages_history(
         
         if qa_prompt:
             messages_history = messages_history[2:-1]
+        elif from_agent:
+            messages_history = messages_history[:-1]
         to_chain['chat_history'] = '\n'.join(messages_history).replace('\n\n', '\n')
         to_chain['users'] = ' '.join(list(users))
     return to_chain, warning_msg
@@ -269,7 +272,7 @@ async def get_reply(bot: SlackBot,
     # get message history
     to_chain, warning_msg = await prepare_messages_history(bot, parsed_body,
                                                            first_ts, to_chain,
-                                                           qa_prompt)
+                                                           qa_prompt, from_agent)
     
     # send initial message
     initial_ts = await send_initial_message(bot, parsed_body, first_ts)
