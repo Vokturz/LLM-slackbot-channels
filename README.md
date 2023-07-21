@@ -21,6 +21,11 @@ https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/c160277b-26a2-4
 
 - **/modify_bot**
     This command allows you to customize the bot's personality, instructions, and temperature within the channel it's operating in. If `!no-notify` is included, then no notification is sent to the channel.
+    <p align="center">
+    <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/ed1cf3f1-bb67-4859-bf44-1b546031390b" width="300" height="400">
+    </p>
+
+
 - **/bot_info**
     This command presents the initial prompt used by the bot, as well as the default 'temperature' for generating responses.
 - **/ask**
