@@ -42,10 +42,16 @@ https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/c160277b-26a2-4
 
     If no password was defined inside `.env`, then this command do nothing.
 
+- **/edit_docs**
+    This command allows the user to edit the descriptions of the documents that have been uploaded to the channel. These edited descriptions are used in the *doc_retriever* tool (See *Mentions*).
+    
 ## Mentions
 - When the bot is mentioned in a thread, it can respond based on the context. The context limit is handled using a `max token limit` in a similar way as `ConversationTokenBufferMemory` from langchain.
 
-- If the bot is mentioned in channel along with uploaded file, then it ask if you want to start a QA thread. It has the possibility to add some context and new separators to chunk the file(s). The files are downloaded in `data/tmp` to define a persistent VectorStore in `data/db`, after the generation of the VectorStore all files are deleted.
+- If the bot is mentioned in channel along with uploaded file, then it ask if you want to start a QA thread or upload the file directly to the channel: The user has the possibility to add some context and new separators to chunk the file(s). The files are downloaded in `data/tmp` to define a persistent VectorStore in `data/db`, after the generation of the VectorStore all files are deleted. 
+
+    - **QA Thread**: The bot responds to the user's message that contains the uploaded file(s), stating that a QA thread has been created with the uploaded file(s) and the context provided by the user
+    - **Upload to channel**: The file is upload to the channel and the tool *doc_retriever* appears in the list of tools once at least one file has been added to the channel. This tool take as context all the files uploaded by the users using this method.
 
     If the channel is used as a simple LLM chain, then a `ConversationRetrievalChain`, otherwise a tool to retrieve the important information from the documents is created and passed to the Agent.
 
@@ -146,7 +152,8 @@ The bot requires the following permissions:
 - [x] Add a command to modify which users can interact with the bot. The command should be initialized using a password, example `/permissions <PASSWORD>`
 - [x] A `ingest` method to create a vector database and use a QA retriever
 - [x] add a custom CallbackHandler to update the messages on the go
-- [ ] A modal view to modify/delete files (how to remove it from the vectorstore?)
+- [x] A modal view to modify files description
+- [] a method to remove files  from the vectorstore
 - [ ] Create a doc retriever for each document, currently is using the same approach from [privateGPT](https://github.com/imartinez/privateGPT)
 - [ ] A way to delete unused QA threads (time limit?)
 - [ ] Deployment in [Modal.com](https://modal.com/)

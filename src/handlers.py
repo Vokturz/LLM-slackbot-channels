@@ -74,7 +74,7 @@ def create_handlers(bot: SlackBot) -> None:
                                 respond : Respond) -> None:
         await ack()
         """
-        Handle the /ask command.
+        Handle the /modify_bot command.
         This function modifies a bot's personality, instructions, and temperature
         based on the channel it is in.
         """
@@ -184,8 +184,9 @@ def create_handlers(bot: SlackBot) -> None:
         
         
         # Extract channel ID and user ID
-        channel_id = json.loads(view["private_metadata"])["channel_id"]
-        notify = json.loads(view["private_metadata"])["notify"]
+        private_metadata = json.loads(view['private_metadata'])
+        channel_id = private_metadata["channel_id"]
+        notify = private_metadata["notify"]
         user = body['user']['id']
 
         bot_values = copy.deepcopy(bot.get_channel_llm_info(channel_id))
@@ -316,8 +317,6 @@ def create_handlers(bot: SlackBot) -> None:
         # Add options
         view["blocks"][0]["accessory"]["initial_users"] = options
 
-        # Include channel_id in private_metadata
-        view["private_metadata"] =  json.dumps({"channel_id": channel_id})
         # Open view for bot modification
         await bot.app.client.views_open(trigger_id=trigger_id, view=view)
 
@@ -328,7 +327,6 @@ def create_handlers(bot: SlackBot) -> None:
         Handle the modify_permissions view.
         """
         user = body['user']['id']
-        channel_id = json.loads(view["private_metadata"])["channel_id"]
         allowed_users = view['state']['values']['allowed_users']
         checkbox = view['state']['values']['notify_users']['notify_users']
         first_item = next(iter(allowed_users))
@@ -591,6 +589,152 @@ def create_handlers(bot: SlackBot) -> None:
         await ack()
         return
     
+
+    @bot.app.command("/edit_docs")
+    @bot.check_permissions
+    async def handle_edit_docs(ack: Ack, body: Dict[str, Any],
+                                respond : Respond) -> None:
+        await ack()
+        """
+        Handle the /edit_docs command.
+        This function modifies a bot's personality, instructions, and temperature
+        based on the channel it is in.
+        """
+        channel_id = body['channel_id']
+        trigger_id = body['trigger_id']
+
+        if bot.verbose:
+            bot.app.logger.info(f"/edit_docs used by {body['user_id']} in channel {channel_id}")
+
+        # Ensure command is only used in channels
+        if channel_id[0] not in ['C', 'G']:
+            await respond(text='This command can only be used in channels.')
+            return
+
+        # Get channel bot info
+        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        has_files = 'files' in channel_bot_info and channel_bot_info['files']
+        if not has_files:
+            await respond(text='This channel has no files.')
+            return
+
+        # Load edit_docs_template.json payload
+        with open(f'{current_directory}/payloads/edit_docs_template.json', 'r') as f:
+            view = json.load(f)
+
+        all_options = []
+        for file_name in channel_bot_info['files'].keys():
+            option = {
+						"text": {
+							"type": "plain_text",
+							"text": file_name
+						},
+						"value": file_name
+					}
+            all_options.append(option)
+
+        view["blocks"][0]["accessory"]["options"] = all_options
+
+        # Include channel_id in private_metadata
+        extra_data = {"channel_id": channel_id}
+        if '!no-notify' in body['text']:
+            extra_data["notify"] = False
+        else:
+            extra_data["notify"] = True
+        view["private_metadata"] =  json.dumps(extra_data)
+
+
+        del view["blocks"][2]
+        del view["blocks"][1]
+
+        # Open view for bot modification
+        await bot.app.client.views_open(trigger_id=trigger_id, view=view)
+
+    @bot.app.action("select_file")
+    async def handle_select_file(ack: Ack, body: Dict[str, Any]) -> None:
+        """Update view when user selects a file from /edit_docs"""
+        view_id = body['container']['view_id']
+        view = body['view']
+        private_metadata = json.loads(view['private_metadata'])
+        channel_id = private_metadata["channel_id"]
+        selected_file = body['actions'][0]['selected_option']['value']
+        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        # Load edit_docs_template.json payload
+        with open(f'{current_directory}/payloads/edit_docs_template.json', 'r') as f:
+            new_view = json.load(f)
+
+        new_view['blocks'][0] = view['blocks'][0]
+
+        file_context = channel_bot_info['files'][selected_file]
+        new_view['blocks'][1]['text']['text'] = f"*{selected_file}*:\n_{file_context}_"
+        new_view['blocks'][1]['accessory']['value'] = selected_file
+
+        # Remove delete buttom temporary
+        del new_view['blocks'][1]['accessory']
+        
+        new_view['blocks'][2]['element']['initial_value'] = file_context
+        
+        new_view['private_metadata'] = view['private_metadata']
+        await ack()
+        await bot.app.client.views_update(view_id=view_id, view=new_view)
+
+
+    @bot.app.action("delete_file")
+    async def handle_delete_file(ack: Ack, say: Say, body: Dict[str, Any]) -> None:
+        """Update view when user selects a file from /edit_docs"""
+        user = body['user']['id']
+        view_id = body['container']['view_id']
+        view = body['view']
+        selected_file = body['actions'][0]['value']
+        
+        private_metadata = json.loads(view['private_metadata'])
+        channel_id = private_metadata["channel_id"]
+        notify = private_metadata["notify"]
+        text = f"File *{selected_file}* has been removed. You can close the modal now."
+        await ack()
+
+        # bot.delete_file_from_channel(channel_id, selected_file)
+
+        await bot.app.client.views_update(
+            view_id=view_id,
+            view={"type": "modal",
+                  "title": {"type": "plain_text", "text": "Edit documents"},
+                  "close": {"type": "plain_text", "text": "Close"},
+                  "blocks": [{"type": "section",
+                              "text": {"type": "mrkdwn","text": text}}]
+                  })
+        if notify:
+            await say(f'_<@{user}> has remove document `{selected_file}`_',
+                       channel=channel_id) 
+
+    @bot.app.view('edit_docs')
+    async def handle_edit_docs_view(ack: Ack, body: Dict[str, Any],
+                                     say: Say, view: Dict[str, Any]) -> None:
+        """
+        Handle the edit_docs view.
+        """
+        await ack()
+        values = view['state']['values']
+        list_values = list(values.values())
+
+        # Extract channel ID and user ID
+        private_metadata = json.loads(view['private_metadata'])
+        channel_id = private_metadata["channel_id"]
+        notify = private_metadata["notify"]
+        user = body['user']['id']
+
+        channel_bot_info = copy.deepcopy(bot.get_channel_llm_info(channel_id))
+        selected_file = list_values[0]['select_file']['selected_option']['value']
+        new_context = list_values[1]['file_context']['value']
+
+        channel_bot_info['files'][selected_file] = new_context
+        bot.define_channel_llm_info(channel_id, channel_bot_info)
+        # Notify channel of bot modification
+        if notify:
+            await say(f'_<@{user}> has modified document `{selected_file}` info_',
+                       channel=channel_id)
+
+
     return {"handle_ask": handle_ask,
             "handle_modify_bot": handle_modify_bot,
             "handle_modify_bot_view": handle_modify_bot_view,

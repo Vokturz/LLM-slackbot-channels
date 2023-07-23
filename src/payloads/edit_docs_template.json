@@ -1,0 +1,93 @@
+{
+	"type": "modal",
+	"callback_id": "edit_docs",
+	"title": {
+		"type": "plain_text",
+		"text": "Edit documents"
+	},
+	"submit": {
+		"type": "plain_text",
+		"text": "Modify"
+	},
+	"close": {
+		"type": "plain_text",
+		"text": "Cancel"
+	},
+	"blocks": [
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "Pick a file from the dropdown list"
+			},
+			"accessory": {
+				"type": "static_select",
+				"action_id": "select_file",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select a file",
+					"emoji": true
+				},
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "*file_name*",
+							"emoji": true
+						},
+						"value": "file_name"
+					}
+				]
+			}
+		},
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "*File_name*: _File context_"
+			},
+			"accessory": {
+				"type": "button",
+				"text": {
+					"type": "plain_text",
+					"text": "Delete file",
+					"emoji": true
+				},
+				"style": "danger",
+				"value": "delete_file",
+                "confirm": {
+					"title": {
+						"type": "plain_text",
+						"text": "Are you sure?"
+					},
+					"text": {
+						"type": "mrkdwn",
+						"text": "This will *permanently* remove bot's access to this file. Are you sure you want to continue?"
+					},
+					"confirm": {
+						"type": "plain_text",
+						"text": "Yes, I'm sure"
+					},
+					"deny": {
+						"type": "plain_text",
+						"text": "Cancel"
+					}
+				},
+				"action_id": "delete_file"
+			}
+		},
+		{
+			"type": "input",
+			"element": {
+				"type": "plain_text_input",
+				"action_id": "file_context",
+				"initial_value": "file_context"
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "This file is about",
+				"emoji": true
+			}
+		}
+	]
+}
