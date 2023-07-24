@@ -523,12 +523,12 @@ async def get_doc_retriever(bot: SlackBot, llm: LLM,
                        a langchain tool. 
     """
     db_path = bot.get_retriever_db_path(parsed_body['channel_id'], first_ts)
+    chroma_settings = Settings(is_persistent=True,
+                                   persist_directory=db_path,
+                                   anonymized_telemetry=False)
     vectorstore = Chroma(persist_directory=db_path,
-                        embedding_function=bot.embeddings,
-                        client_settings=Settings(
-                                    chroma_db_impl='duckdb+parquet',
-                                    persist_directory=db_path,
-                                    anonymized_telemetry=False)
+                         embedding_function=bot.embeddings,
+                         client_settings=chroma_settings
                         )
     doc_retriever = vectorstore.as_retriever(kwargs={'k': bot.k_similarity})
     if not as_tool:

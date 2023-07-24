@@ -122,11 +122,9 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
     """
     Checks if vectorstore exists
     """
-    if os.path.exists(os.path.join(persist_directory, 'index')):
-        if os.path.exists(os.path.join(persist_directory, 'chroma-collections.parquet')) and os.path.exists(os.path.join(persist_directory, 'chroma-embeddings.parquet')):
-            list_index_files = glob.glob(os.path.join(persist_directory, 'index/*.bin'))
-            list_index_files += glob.glob(os.path.join(persist_directory, 'index/*.pkl'))
-            # At least 3 documents are needed in a working vectorstore
-            if len(list_index_files) > 3:
-                return True
+    if os.path.exists(persist_directory) and os.path.exists(os.path.join(persist_directory, 'chroma.sqlite3')):
+        list_index_files = glob.glob(os.path.join(persist_directory, '*/*'))
+         # At least 4 files are needed in a working vectorstore
+        if len(list_index_files) > 3:
+            return True
     return False

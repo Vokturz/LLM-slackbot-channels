@@ -14,7 +14,7 @@ from langchain.docstore.document import Document
 from langchain.vectorstores.base import VectorStore
 from langchain.vectorstores import Chroma
 from langchain.tools import BaseTool
-import glob
+import shutil
 from chromadb.config import Settings
 from .ingest import does_vectorstore_exist
 
@@ -109,9 +109,10 @@ class SlackBot:
                     channels_llm_info[channel_id]['tool_names'] = []
                 if 'as_agent' not in channels_llm_info[channel_id]:
                     channels_llm_info[channel_id]['as_agent'] = False
-                if 'files' in channels_llm_info[channel_id]:
-                    db_path = f"{db_dir}/{channel_id}/"
-                    if not does_vectorstore_exist(db_path): # No db exists
+                db_path = f"{db_dir}/{channel_id}/channel_db"
+                if not does_vectorstore_exist(db_path): # No db exists
+                    self.delete_vectorstore(channel_id)
+                    if 'files' in channels_llm_info[channel_id]:
                         del channels_llm_info[channel_id]['files']
                 self.define_channel_llm_info(channel_id,
                                              channels_llm_info[channel_id],
@@ -246,35 +247,35 @@ class SlackBot:
         """
         if not os.path.exists(f"{db_dir}/{channel_id}"):
             os.mkdir(f"{db_dir}/{channel_id}")
-        persist_directory = f"{db_dir}/{channel_id}/{ts}"
-        if not os.path.exists(persist_directory):
-            os.mkdir(persist_directory)
-
+        
+        
         if ts:
             msg = "Creating DB for channel's thread.."
             init_msg = asyncio.run(self.app.client.chat_postMessage(channel=channel_id,
                                                     thread_ts=ts,
                                                     text=msg))
+            persist_directory = f"{db_dir}/{channel_id}/{ts}"
         else:
             msg = "Adding files to channel.."
             init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
                                                 user=user_id,
                                                 text=msg))
-        
-        chroma_settings = Settings(chroma_db_impl='duckdb+parquet',
+            persist_directory = f"{db_dir}/{channel_id}/channel_db"
+        if not os.path.exists(persist_directory):
+            os.mkdir(persist_directory)
+
+        chroma_settings = Settings(is_persistent=True,
                                    persist_directory=persist_directory,
                                    anonymized_telemetry=False)
         if does_vectorstore_exist(persist_directory):
             self.app.logger.info(f"Appending to existing DB at {persist_directory}")
-            db = Chroma(persist_directory=persist_directory,
-                        embedding_function=self.embeddings,
+            db = Chroma(embedding_function=self.embeddings,
                         client_settings=chroma_settings)
             db.add_documents(docs)
         else:
             db = Chroma.from_documents(docs, embedding=self.embeddings,
                                     persist_directory=persist_directory,
                                     client_settings=chroma_settings)
-        db.persist()
         db = None
 
         if ts:
@@ -286,7 +287,7 @@ class SlackBot:
                                                 ts=init_msg['ts'],
                                                 text=msg))
         else:
-            msg = "File added to Channel!"
+            msg = "Files added to Channel!"
             init_msg = asyncio.run(self.app.client.chat_postEphemeral(channel=channel_id,
                                                 user=user_id,
                                                 text=msg, replace_original=True))
@@ -313,8 +314,10 @@ class SlackBot:
                                corresponding to the channel and thread.
         """
 
-        
-        persist_directory = f"{db_dir}/{channel_id}/{ts}"
+        if ts:
+            persist_directory = f"{db_dir}/{channel_id}/{ts}"
+        else:
+            persist_directory = f"{db_dir}/{channel_id}/channel_db"
         return persist_directory
     
     def define_channel_llm_info(self, channel_id: str,
@@ -385,7 +388,37 @@ class SlackBot:
         files_dict = self.stored_files[timestamp]
         return files_dict
 
+    def delete_file_from_channel(self, channel_id: str, file_name: str) -> None:
+        """
+        Deletes the file from the channel.
+        """
+        channel_llm_info = self.get_channel_llm_info(channel_id)
+        
+        source = 'data/tmp/' + file_name
+        persist_directory = f"{db_dir}/{channel_id}/channel_db"
+        chroma_settings = Settings(is_persistent=True,
+                                   persist_directory=persist_directory,
+                                   anonymized_telemetry=False)
+        db = Chroma(embedding_function=self.embeddings,
+                    client_settings=chroma_settings)
+        self.app.logger.info(f"Removing {file_name} from {persist_directory} DB")
+        db._collection.delete(where={'source': source})
+        channel_llm_info['files'].pop(file_name)
+        db = None
 
+        if not channel_llm_info['files']:
+            del channel_llm_info['files']
+            self.delete_vectorstore(channel_id)
+        self.define_channel_llm_info(channel_id, channel_llm_info)
+            
+    def delete_vectorstore(self, channel_id: str,
+                           timestamp: Optional[str]='') -> None:
+        if timestamp:
+            persist_directory = f"{db_dir}/{channel_id}/{timestamp}"
+        else:
+            persist_directory = f"{db_dir}/{channel_id}/channel_db"
+        if os.path.exists(persist_directory):
+            shutil.rmtree(persist_directory)
     def get_llm_by_channel(self, channel_id: str, **kwargs) -> LLM:
         """
         Retrieves the language model configured for a specific channel.
