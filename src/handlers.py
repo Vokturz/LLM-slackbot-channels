@@ -50,12 +50,12 @@ def create_handlers(bot: SlackBot) -> None:
         # Generate prompt for the channel
         prompt = PromptTemplate.from_template(template=prompts.DEFAULT_PROMPT)
 
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = bot.get_channel_llm_info(channel_id)
 
         # Get the response from the LLM
         response, initial_ts = await get_reply(bot, parsed_body, prompt, 
                                                None, None,
-                                               channel_bot_info['as_agent'])
+                                               channel_llm_info['as_agent'])
         # Format the response
         response = f"*<@{user_id}> asked*: {parsed_body['query']}\n*Answer*:\n{response}"
 
@@ -94,24 +94,24 @@ def create_handlers(bot: SlackBot) -> None:
             view = json.load(f)
         
         # Get channel bot info
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = bot.get_channel_llm_info(channel_id)
             
         # Replace with channel bot info
-        view["blocks"][0]["element"]["initial_value"] = channel_bot_info['personality']
-        view["blocks"][1]["element"]["initial_value"] = channel_bot_info['instructions']
-        view["blocks"][2]["element"]["initial_value"] = str(channel_bot_info['temperature'])
+        view["blocks"][0]["element"]["initial_value"] = channel_llm_info['personality']
+        view["blocks"][1]["element"]["initial_value"] = channel_llm_info['instructions']
+        view["blocks"][2]["element"]["initial_value"] = str(channel_llm_info['temperature'])
 
         # OpenAI model, only if model_type is openai
         if bot.model_type == 'openai':
-            if 'openai_model' in channel_bot_info:
+            if 'openai_model' in channel_llm_info:
                 initial_text = ("ChatModel: "
-                                if channel_bot_info['openai_model'].startswith('gpt')
+                                if channel_llm_info['openai_model'].startswith('gpt')
                                 else "InstructModel: ")
                 initial_option = {"text": {
                                         "type": "plain_text",
-                                        "text": f"{initial_text}{channel_bot_info['openai_model']}"
+                                        "text": f"{initial_text}{channel_llm_info['openai_model']}"
                                     },
-                            "value": channel_bot_info['openai_model']
+                            "value": channel_llm_info['openai_model']
                             }
                 view["blocks"][3]["element"]["initial_option"] =  initial_option
         else:
@@ -119,7 +119,7 @@ def create_handlers(bot: SlackBot) -> None:
                                   "text": { "type": "plain_text", "text": " "}}
 
         # Agent or Chain
-        if channel_bot_info['as_agent']:
+        if channel_llm_info['as_agent']:
             view["blocks"][4]["element"]["initial_option"]["value"] = "as_agent"
             view["blocks"][4]["element"]["initial_option"]["text"]["text"] = "Use it as an Agent"
         else:
@@ -130,7 +130,7 @@ def create_handlers(bot: SlackBot) -> None:
         # Tools
         all_options = []
         tool_names = bot.tool_names.copy()
-        if 'files' in channel_bot_info and channel_bot_info['files']:
+        if 'files' in channel_llm_info and channel_llm_info['files']:
             tool_names.append('doc_retriever')
 
         for tool in tool_names:
@@ -154,7 +154,7 @@ def create_handlers(bot: SlackBot) -> None:
         view["private_metadata"] =  json.dumps(extra_data)
 
         initial_options = []
-        for tool in channel_bot_info['tool_names']:
+        for tool in channel_llm_info['tool_names']:
             if tool in tool_names:
                 option = {
                             "text": {
@@ -385,7 +385,7 @@ def create_handlers(bot: SlackBot) -> None:
         
         # Get the bot info asociated with the channel
         channel_id = parsed_body["channel_id"]
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = bot.get_channel_llm_info(channel_id)
 
         # Ensure is only used in channels
         if channel_id[0] not in ['C', 'G']:
@@ -427,7 +427,7 @@ def create_handlers(bot: SlackBot) -> None:
             # Get reply and update initial message
             response, initial_ts = await get_reply(bot, parsed_body, prompt, 
                                                 qa_prompt, thread_ts,
-                                                channel_bot_info['as_agent'])
+                                                channel_llm_info['as_agent'])
 
             client = bot.app.client
             await client.chat_update(channel=channel_id, ts=initial_ts,
@@ -443,7 +443,7 @@ def create_handlers(bot: SlackBot) -> None:
                 file_name_list = [f["name"] for f in files]
 
                 for i, _file in enumerate(file_name_list):
-                    if 'files' in channel_bot_info and _file in channel_bot_info['files']:
+                    if 'files' in channel_llm_info and _file in channel_llm_info['files']:
                         bot.app.logger.info(f"File '{_file}' already in channel {channel_id}")
                         msg += f"\n-_*{_file}* already exists._"
                         del files[i]
@@ -498,10 +498,10 @@ def create_handlers(bot: SlackBot) -> None:
         options_block = view['blocks'][2]
         view['blocks'] = []
 
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = bot.get_channel_llm_info(channel_id)
         files_name_list = [f['name'] for f in files]
         for i, _file in enumerate(files_name_list):
-            if 'files' in channel_bot_info and _file in channel_bot_info['files']:
+            if 'files' in channel_llm_info and _file in channel_llm_info['files']:
                 # file already uploaded
                 continue
             new_block = copy.deepcopy(extra_context_block)
@@ -612,8 +612,8 @@ def create_handlers(bot: SlackBot) -> None:
             return
 
         # Get channel bot info
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
-        has_files = 'files' in channel_bot_info and channel_bot_info['files']
+        channel_llm_info = bot.get_channel_llm_info(channel_id)
+        has_files = 'files' in channel_llm_info and channel_llm_info['files']
         if not has_files:
             await respond(text='This channel has no files.')
             return
@@ -623,7 +623,7 @@ def create_handlers(bot: SlackBot) -> None:
             view = json.load(f)
 
         all_options = []
-        for file_name in channel_bot_info['files'].keys():
+        for file_name in channel_llm_info['files'].keys():
             option = {
 						"text": {
 							"type": "plain_text",
@@ -658,19 +658,19 @@ def create_handlers(bot: SlackBot) -> None:
         private_metadata = json.loads(view['private_metadata'])
         channel_id = private_metadata["channel_id"]
         selected_file = body['actions'][0]['selected_option']['value']
-        channel_bot_info = bot.get_channel_llm_info(channel_id)
+        channel_llm_info = bot.get_channel_llm_info(channel_id)
         # Load edit_docs_template.json payload
         with open(f'{current_directory}/payloads/edit_docs_template.json', 'r') as f:
             new_view = json.load(f)
 
         new_view['blocks'][0] = view['blocks'][0]
 
-        file_context = channel_bot_info['files'][selected_file]
+        file_context = channel_llm_info['files'][selected_file]
         new_view['blocks'][1]['text']['text'] = f"*{selected_file}*:\n_{file_context}_"
         new_view['blocks'][1]['accessory']['value'] = selected_file
 
         # Remove delete buttom temporary
-        del new_view['blocks'][1]['accessory']
+        #del new_view['blocks'][1]['accessory']
         
         new_view['blocks'][2]['element']['initial_value'] = file_context
         
@@ -692,8 +692,8 @@ def create_handlers(bot: SlackBot) -> None:
         notify = private_metadata["notify"]
         text = f"File *{selected_file}* has been removed. You can close the modal now."
         await ack()
-
-        # bot.delete_file_from_channel(channel_id, selected_file)
+        
+        bot.delete_file_from_channel(channel_id, selected_file)
 
         await bot.app.client.views_update(
             view_id=view_id,
@@ -723,12 +723,12 @@ def create_handlers(bot: SlackBot) -> None:
         notify = private_metadata["notify"]
         user = body['user']['id']
 
-        channel_bot_info = copy.deepcopy(bot.get_channel_llm_info(channel_id))
+        channel_llm_info = copy.deepcopy(bot.get_channel_llm_info(channel_id))
         selected_file = list_values[0]['select_file']['selected_option']['value']
         new_context = list_values[1]['file_context']['value']
 
-        channel_bot_info['files'][selected_file] = new_context
-        bot.define_channel_llm_info(channel_id, channel_bot_info)
+        channel_llm_info['files'][selected_file] = new_context
+        bot.define_channel_llm_info(channel_id, channel_llm_info)
         # Notify channel of bot modification
         if notify:
             await say(f'_<@{user}> has modified document `{selected_file}` info_',
