@@ -53,6 +53,9 @@ https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/1ce26536-2c6a-4
 
     - **QA Thread**: The bot responds to the user's message that contains the uploaded file(s), stating that a QA thread has been created with the uploaded file(s) and the context provided by the user
     - **Upload to channel**: The file is upload to the channel and the tool *doc_retriever* appears in the list of tools once at least one file has been added to the channel. This tool take as context all the files uploaded by the users using this method.
+    <p align="center">
+    <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/5dc9ef8f-dda8-49df-af76-72ee465cdf81" width="600" height="250">
+    </p>
 
     If the channel is used as a simple LLM chain, then a `ConversationRetrievalChain`, otherwise a tool to retrieve the important information from the documents is created and passed to the Agent.
 
@@ -136,6 +139,7 @@ The bot requires the following permissions:
    - `/modify_bot` Modify bot's configuration for the current channel 
    - `/bot_info` Get *prompt* and *temperature* of the bot in the current channel
    - `/permissions` (optional)  Modify which users can interact with the bot
+   - `/edit_docs` Modify documents uploaded to the bot in the current channel
 4. Enable **Events**
    - Subscribe to `app_mention`
 5. Set **Scopes**
