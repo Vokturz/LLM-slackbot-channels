@@ -4,6 +4,7 @@ import time
 import asyncio
 from typing import (Dict, Optional, Any, Union, Tuple, List, Set)
 from .slackbot import SlackBot
+from .slackagent import slack_agent
 from langchain import PromptTemplate, LLMChain
 from langchain.chains import ConversationalRetrievalChain, RetrievalQA
 from langchain.vectorstores import Chroma
@@ -13,7 +14,6 @@ from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 from langchain.agents import Tool
 from langchain.llms.base import LLM
 from langchain.chains.base import Chain
-
 
 # Get the directory path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -269,6 +269,12 @@ async def get_reply(bot: SlackBot,
         qa_thread = True if qa_prompt else False
         qa_prompt = None
 
+
+    if parsed_body['from_command']:
+        initial_msg = f"*<@{parsed_body['user_id']}> asked*: {parsed_body['query']}\n"
+    else:
+        initial_msg = ""
+
     # get message history
     to_chain, warning_msg = await prepare_messages_history(bot, parsed_body,
                                                            first_ts, to_chain,
@@ -278,7 +284,9 @@ async def get_reply(bot: SlackBot,
     initial_ts = await send_initial_message(bot, parsed_body, first_ts)
 
     # get callback handlers
-    async_handler, handler = get_callback_handlers(bot, parsed_body, initial_ts)  
+    async_handler, handler = get_callback_handlers(bot, initial_msg,
+                                                   parsed_body, initial_ts,
+                                                   from_agent)  
 
     # generate response using language model
     llm_call = asyncio.Lock()
@@ -324,14 +332,14 @@ async def get_reply(bot: SlackBot,
                     except Exception as e:
                         bot.app.logger.info(e) 
             
-            from .slackagent import slack_agent
             executor = slack_agent(bot, llm, personality=agent_info['personality'],
                                    instructions=agent_info['instructions'],
                                    users=agent_info['users'],
                                    chat_history=agent_info['chat_history'],
                                    tools=agent_info['tools'],
                                    initial_ts=initial_ts,
-                                   channel_id=parsed_body['channel_id']) 
+                                   channel_id=parsed_body['channel_id'],
+                                   initial_message=initial_msg) 
         # Get final response    
         try: 
             resp_llm = await executor.arun(input_dict, callbacks=[async_handler])
@@ -350,8 +358,10 @@ async def get_reply(bot: SlackBot,
     return response, initial_ts
         
 def get_callback_handlers(bot: SlackBot,
+                initial_message: str,
                 parsed_body: Dict[str, Union[str, float]],
-                initial_ts: Optional[str]=''
+                initial_ts: Optional[str]='',
+                from_agent: bool = False
                 )-> Tuple[AsyncCallbackHandler, BaseCallbackHandler]:
     """
     Generates the asynchronous and synchronous handlers needed for
@@ -362,28 +372,25 @@ def get_callback_handlers(bot: SlackBot,
         parsed_body: The relevant information from the body obtained from
                      parse_format_body.
         initial_ts: The timestamp of the initial message sent by the bot.
-
+        from_agent: Type of the reply, from an agent or a chain
     Returns:
         async_handler, handler: A tuple containing the async handler and the
                                 sync handler respectively. These handlers are
                                 responsible for handling the bot's callback
                                 operations.
     """
-    if parsed_body['from_command']:
-        initial_msg = f"*<@{parsed_body['user_id']}> asked*: {parsed_body['query']}\n"
-    else:
-        initial_msg = ""
-
     if parsed_body['to_all']:
         async_handler = SlackAsyncCallbackHandler(bot,
                                     channel_id=parsed_body['channel_id'], 
                                     ts=initial_ts,
-                                    inital_message=initial_msg)
+                                    inital_message=initial_message,
+                                    from_agent=from_agent)
 
         handler = SlackCallbackHandler(bot,
                                     channel_id=parsed_body['channel_id'], 
                                     ts=initial_ts,
-                                    inital_message=initial_msg)   
+                                    inital_message=initial_message,
+                                    from_agent=from_agent)  
     else:
         async_handler = AsyncCallbackHandler()
         handler = BaseCallbackHandler()

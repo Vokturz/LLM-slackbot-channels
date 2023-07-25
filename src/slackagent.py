@@ -59,6 +59,8 @@ class CustomOutputParser(AgentOutputParser):
     initial_ts: str
     # channel where the message was sent
     channel_id: str
+    # initial message
+    initial_message: str
 
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
         if f"Final Answer:" in text:
@@ -71,14 +73,14 @@ class CustomOutputParser(AgentOutputParser):
             raise OutputParserException(f"Could not parse LLM output: `{text}`")
         action = match.group(1)
         action_input = match.group(2)
-        msg = match[0].replace('\n', ', ')
+        msg = self.initial_message + match[0].replace('\n', ', ')
         self.bot.app.logger.info(msg)
         client = self.bot.app.client
         try:
             loop = asyncio.get_event_loop()
             loop.run_until_complete(client.chat_update(channel=self.channel_id,
                                     ts=self.initial_ts, 
-                                    text=msg + "... :hourglass_flowing_sand:"))
+                                    text=msg + "... :hourglass_flowing_sand:\n"))
         except Exception as e:
             self.bot.app.logger.error(f'SlackAgent Cannot update the message: {e}')
         
@@ -87,7 +89,8 @@ class CustomOutputParser(AgentOutputParser):
 
 def slack_agent(bot: SlackBot, llm: LLM, personality: str,
                 instructions: str, users: str, chat_history: str,
-                tools: List[BaseTool], initial_ts: float, channel_id: str
+                tools: List[BaseTool], initial_ts: float, channel_id: str,
+                initial_message: str
                 ) -> AgentExecutor:
     """
     Create an agent executor for the Slackbot
@@ -102,6 +105,7 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
         tools: The list of tools available
         initial_ts: The timestamp of the initial message
         channel_id: The channel where the message was sent
+        initial_message: The initial message
     Returns:
         agent_executor: The agent executor
     """
@@ -119,7 +123,8 @@ def slack_agent(bot: SlackBot, llm: LLM, personality: str,
         initial_ts = ""
     output_parser = CustomOutputParser(bot=bot,
                                        initial_ts=initial_ts,
-                                       channel_id=channel_id)
+                                       channel_id=channel_id,
+                                       initial_message=initial_message)
     tool_names = [tool.name for tool in tools]
     agent = LLMSingleActionAgent(
         llm_chain=llm_chain,
