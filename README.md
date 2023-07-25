@@ -5,12 +5,13 @@ LLM-SlackBot-Channels is a Slack bot built using the Slack Bolt framework. It en
 
 This repository mainly uses **langchain**, it supports the usage of open-source LLMs and embeddings, and also OpenAI.
 <p align="center">
-<img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/6b3e5c92-46b6-41e9-a790-290dc70fb900" width="720" height="720">
+<img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/4ed5b2b0-b9e3-4dec-8f59-569eb4a3c943" width="720" height="720">
 </p>
 
 See a video example here:
 
-https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/c160277b-26a2-47b6-9d9b-5afabe2fadeb
+https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/1ce26536-2c6a-44cd-b8f4-c0dd13fa8624
+
 
 ## What's new? v0.2
 - Improve the way a file is uploaded to a QA thread
