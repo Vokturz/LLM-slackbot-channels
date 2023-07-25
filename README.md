@@ -10,7 +10,8 @@ This repository mainly uses **langchain**, it supports the usage of open-source 
 
 See a video example here:
 
-https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/1ce26536-2c6a-44cd-b8f4-c0dd13fa8624
+https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/d69106f3-3de1-4781-9e1d-9b855acd2836
+
 
 
 ## What's new? v0.2
