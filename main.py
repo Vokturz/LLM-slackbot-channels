@@ -33,7 +33,8 @@ if bot.model_type == 'llama':
     config = dict(gpu_layers=40, temperature=0.8, batch_size=1024, 
                 context_length=2048, threads=6, stream=True, max_new_tokens=bot.max_tokens)
 else:
-    config = dict(model_name="gpt-3.5-turbo-16k", temperature=0.8, max_tokens=bot.max_tokens)
+    config = dict(model_name="gpt-3.5-turbo-16k", temperature=0.8,
+                  streaming=True, max_tokens=bot.max_tokens)
 
 # Initialize LLM and embeddings
 bot.app.logger.info("Initializing LLM and embeddings...")

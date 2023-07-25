@@ -171,6 +171,13 @@ class SlackBot:
             config = {'temperature': 0.8, 'max_tokens': 300}
         model_type = model_type.lower()
         self.model_type = model_type
+
+        self.llm_stream = False # by default
+        if 'stream' in config:
+            self.llm_stream = config['stream']
+        elif 'streaming' in config:
+            self.llm_stream = config['streaming']
+
         if model_type == 'fakellm':
             responses = [f'foo' for i in range(1000)]
             self.llm = FakeListLLM(responses = responses)
@@ -419,13 +426,14 @@ class SlackBot:
             persist_directory = f"{db_dir}/{channel_id}/channel_db"
         if os.path.exists(persist_directory):
             shutil.rmtree(persist_directory)
+
+
     def get_llm_by_channel(self, channel_id: str, **kwargs) -> LLM:
         """
         Retrieves the language model configured for a specific channel.
         """
         channel_llm_info = self.get_channel_llm_info(channel_id)
         if self.model_type == 'openai':
-
             if 'openai_model' not in channel_llm_info:
                 model_name = self.default_openai_model 
             else:
@@ -434,9 +442,9 @@ class SlackBot:
                            temperature=channel_llm_info['temperature'],
                            max_tokens=self.max_tokens)
             if config["model_name"].startswith("gpt"):
-                    llm = ChatOpenAI(**config, **kwargs)
+                    llm = ChatOpenAI(streaming=self.llm_stream, **config, **kwargs)
             else:
-                    llm = OpenAI(**config, **kwargs)
+                    llm = OpenAI(streaming=self.llm_stream, **config, **kwargs)
         else:
             llm = self.llm
             llm.client.config.temperature = channel_llm_info['temperature']
