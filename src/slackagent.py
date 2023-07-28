@@ -73,7 +73,7 @@ class CustomOutputParser(AgentOutputParser):
             raise OutputParserException(f"Could not parse LLM output: `{text}`")
         action = match.group(1)
         action_input = match.group(2)
-        msg = self.initial_message + match[0].replace('\n', ', ')
+        msg = self.initial_message + '`' + match[0].replace('\n', ', ') + '`'
         self.bot.app.logger.info(msg)
         client = self.bot.app.client
         try:
