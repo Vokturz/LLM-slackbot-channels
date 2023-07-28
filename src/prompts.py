@@ -1,4 +1,4 @@
-INITIAL_BOT_PROMPT = "Instruction: You are {personality}. {instructions}"
+INITIAL_BOT_PROMPT = "Instruction: You are {personality}. {instructions}. You must answer using Slack markdown format: <url|link title> for links; *bold* for bold; _italic_ for italic."
 
 
 DEFAULT_PROMPT = INITIAL_BOT_PROMPT + """
