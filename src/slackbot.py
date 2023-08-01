@@ -447,7 +447,10 @@ class SlackBot:
                     llm = OpenAI(streaming=self.llm_stream, **config, **kwargs)
         else:
             llm = self.llm
-            llm.client.config.temperature = channel_llm_info['temperature']
+            try: # CTransformers
+                llm.client.config.temperature = channel_llm_info['temperature']
+            except: # FakeLLM
+                pass 
         return llm
     
 
