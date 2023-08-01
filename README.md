@@ -113,13 +113,12 @@ bot = SlackBot(name='SlackBot', model_type=model_type)
 # Set configuration
 config = dict(model_name="gpt-3.5-turbo", temperature=0.8, max_tokens=500)
 
-# Initialize LLM
+# Initialize LLM and embeddings
 # max_tokens_threads refers to the max tokens to consider in a thread message history
-bot.initialize_llm(model_type, max_tokens_threads=2000, config=config)
+bot.initialize_llm(max_tokens_threads=2000, config=config)
 
-# Initialize Embeddings
-# If you don't want to use OpenAI Embeddings you can modify this part with llama to use a model from EMB_MODEL env variable
-bot.initialize_embeddings(model_type)
+# If you don't want to use OpenAI Embeddings, you can add model_type parameter  to use a model from EMB_MODEL env variable
+bot.initialize_embeddings() # model_type='llama' for HugginFaceEmbeddings
 
 # Create handlers for commands /ask, /modify_bot, /bot_info  and bot mentions
 create_handlers(bot)

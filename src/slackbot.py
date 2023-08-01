@@ -59,6 +59,7 @@ class SlackBot:
         """
         self.name = name
         self.model_type = model_type.lower()
+
         # Setting Logger
         logger_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         self.verbose = verbose
@@ -144,7 +145,7 @@ class SlackBot:
         self.stored_files = {}
 
             
-    def initialize_llm(self, model_type: str,
+    def initialize_llm(self, model_type: Optional[str] = None,
                        max_tokens_threads: int = 2000,
                        config: Dict[str, Union[float, int]] = None,
                        **kwargs) -> None:
@@ -163,14 +164,14 @@ class SlackBot:
             ValueError: If model_type is ctransformers and CTRANSFORMERS_MODEL
                         environment variable could not be found
         """
+        if model_type is None:
+            model_type = self.model_type
 
         # Max number of tokens to pass in a channel thread
         self.max_tokens_threads = max_tokens_threads
 
         if not config:
             config = {'temperature': 0.8, 'max_tokens': 300}
-        model_type = model_type.lower()
-        self.model_type = model_type
 
         self.llm_stream = False # by default
         if 'stream' in config:
@@ -203,7 +204,7 @@ class SlackBot:
                 if 'openai_model' not in self.channels_llm_info[channel_id]:
                         self.channels_llm_info[channel_id]['openai_model'] = config["model_name"]
             
-    def initialize_embeddings(self, model_type: str, **kwargs) -> None:
+    def initialize_embeddings(self, model_type: Optional[str] = None, **kwargs) -> None:
         """
         Initializes embeddings based on model type.
 
@@ -215,7 +216,9 @@ class SlackBot:
             ValueError: If model_type is ctransformers and EMB_MODEL
                         environment variable could not be found
         """
-        model_type = model_type.lower()
+        if model_type is None:
+            model_type = self.model_type
+            
         if model_type == 'fakellm':
             self.embeddings = FakeEmbeddings(size=768)
         elif model_type == 'openai':
