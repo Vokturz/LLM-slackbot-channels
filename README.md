@@ -1,9 +1,9 @@
 
 # LLM Slack Bot Channels
 
-LLM-SlackBot-Channels is a Slack bot built using the Slack Bolt framework. It enables users to interact with a bot through Slack channels using various commands. The bot utilizes a Large Language Model (LLM) to generate responses based on user input.
+LLM-SlackBot-Channels is a Slack bot developed using the Slack Bolt framework. It allows users to interact with the bot through Slack channels by employing various commands. The bot leverages a Large Language Model (LLM) to generate responses based on both user input and channel-specific configurations. Unique to each channel, the bot can adopt different personalities and follow a customized set of instructions. This includes the ability to use it as an *agent*, integrating tools and documents.
 
-This repository mainly uses **langchain**, it supports the usage of open-source LLMs and embeddings, and also OpenAI.
+This repository mainly uses **langchain**. It supports the usage of open LLMs and embeddings, and OpenAI's models as well.
 <p align="center">
 <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/4ed5b2b0-b9e3-4dec-8f59-569eb4a3c943" width="720" height="720">
 </p>
