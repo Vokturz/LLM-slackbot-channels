@@ -50,7 +50,7 @@ def parse_format_body(body: Dict[str, Any],
     to_all = '!all' in query
     query = query.replace('!all', '') if to_all else query
     
-    # Check if message includes !temp adn extract it
+    # Check if message includes !temp and extract it
     new_temp_match = re.search(r'!temp=([\d.]+)', query)
     new_temp = float(new_temp_match.group(1)) if new_temp_match else -1
     # check if temp is valid
@@ -353,8 +353,8 @@ async def get_reply(bot: SlackBot,
 
     if bot.verbose:
         response += f"\n(_time: `{final_time}` min. `temperature={temp}`_)"
-        bot.app.logger.info(response.replace('\n', ''))
         response += warning_msg
+        bot.app.logger.info(response.replace('\n', ''))
     return response, initial_ts
         
 def get_callback_handlers(bot: SlackBot,
