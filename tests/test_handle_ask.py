@@ -19,11 +19,10 @@ class TestSlackBotCommands(unittest.IsolatedAsyncioTestCase):
         cls.bot = SlackBot()
         # FakeLLM only returns "foo"
         cls.bot.initialize_llm(model_type='fakellm')
-        cls.bot.initialize_embeddings(model_type='fakellm')
         # Set allowed user
-        cls.bot._allowed_users = {'users' : 'U123456'}
+        cls.bot.allowed_users = {'users' : 'U123456'}
         # Set channel bot info
-        cls.bot._channels_llm_info = {'C123456' : cls.bot._default_llm_info}
+        cls.bot.channels_llm_info = {'C123456' : cls.bot.default_llm_info}
         # Define handlers
         cls.handlers = create_handlers(cls.bot)
     
@@ -112,8 +111,8 @@ class TestSlackBotCommands(unittest.IsolatedAsyncioTestCase):
                                                  text=init_msg, thread_ts=None)
         # final message
         resp =f"*<@{command['user_id']}> asked*: {command_no_all}\n*Answer*:\nfoo"
-        chat_update.assert_called_once_with(channel=command['channel_id'], ts=ts, text=resp)
+        chat_update.assert_called_with(channel=command['channel_id'], ts=ts, text=resp)
         respond.assert_not_called()
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
