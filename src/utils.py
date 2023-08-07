@@ -344,10 +344,14 @@ async def get_reply(bot: SlackBot,
         try: 
             resp_llm = await executor.arun(input_dict, callbacks=[async_handler])
         except NotImplementedError:
-                bot.app.logger.info('No Async generation implemented for this LLM'
-                                    ', using sync mode')
-                resp_llm = executor.run(input_dict, callbacks=[handler])
-                
+            bot.app.logger.info("No Async generation implemented for this LLM"
+                                ", using sync mode")
+            resp_llm = executor.run(input_dict, callbacks=[handler])
+        except Exception as e:
+            error_msg = f"Error while generating response: {e}"
+            bot.app.logger.error(error_msg)
+            resp_llm = '_' + error_msg + '_'
+            
         response = resp_llm.strip()
         final_time = round((time.time() - start_time)/60,2)
 
