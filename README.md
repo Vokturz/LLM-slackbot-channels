@@ -52,7 +52,8 @@ https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/d69106f3-3de1-4
 
 - If the bot is mentioned in channel along with uploaded file, then it ask if you want to start a QA thread or upload the file directly to the channel: The user has the possibility to add some context and new separators to chunk the file(s). The files are downloaded in `data/tmp` to define a persistent VectorStore in `data/db`, after the generation of the VectorStore all files are deleted. 
 
-    - **QA Thread**: The bot responds to the user's message that contains the uploaded file(s), stating that a QA thread has been created with the uploaded file(s) and the context provided by the user
+    - **QA Thread**: The bot responds to the user's message that contains the uploaded file(s), stating that a QA thread has been created with the uploaded file(s) and the context provided by the user.
+        - If the user wants to remove the QA thread, use the flag `!delete-qa` while mentioning the bot.
     - **Upload to channel**: The file is upload to the channel and the tool *doc_retriever* appears in the list of tools once at least one file has been added to the channel. This tool take as context all the files uploaded by the users using this method.
     <p align="center">
     <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/5dc9ef8f-dda8-49df-af76-72ee465cdf81" width="600" height="250">
@@ -158,8 +159,7 @@ The bot requires the following permissions:
 - [x] A `ingest` method to create a vector database and use a QA retriever
 - [x] add a custom CallbackHandler to update the messages on the go
 - [x] A modal view to modify files description
-- [] a method to remove files  from the vectorstore
+- [x] a method to remove files from the vectorstore
+- [x] A way to delete unused QA threads
 - [ ] Create a doc retriever for each document, currently is using the same approach from [privateGPT](https://github.com/imartinez/privateGPT)
-- [ ] A way to delete unused QA threads (time limit?)
-- [ ] Deployment in [Modal.com](https://modal.com/)
 - [ ] Create tests

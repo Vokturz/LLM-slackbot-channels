@@ -398,14 +398,21 @@ class SlackBot:
         files_dict = self.stored_files[timestamp]
         return files_dict
 
-    def delete_file_from_channel(self, channel_id: str, file_name: str) -> None:
+    def delete_file_from_channel(self, channel_id: str, file_name: str,
+                                 timestamp: Optional[str]='') -> None:
         """
         Deletes the file from the channel.
         """
         channel_llm_info = self.get_channel_llm_info(channel_id)
         
         source = 'data/tmp/' + file_name
-        persist_directory = f"{db_dir}/{channel_id}/channel_db"
+
+        if timestamp:
+            persist_directory = f"{db_dir}/{channel_id}/{timestamp}"
+        else:
+            persist_directory = f"{db_dir}/{channel_id}/channel_db"
+            
+            
         chroma_settings = Settings(is_persistent=True,
                                    persist_directory=persist_directory,
                                    anonymized_telemetry=False)
@@ -413,14 +420,17 @@ class SlackBot:
                     client_settings=chroma_settings)
         self.app.logger.info(f"Removing {file_name} from {persist_directory} DB")
         db._collection.delete(where={'source': source})
-        channel_llm_info['files'].pop(file_name)
         db = None
 
-        if not channel_llm_info['files']:
-            del channel_llm_info['files']
-            self.delete_vectorstore(channel_id)
-        self.define_channel_llm_info(channel_id, channel_llm_info)
-            
+        if not timestamp:
+            channel_llm_info['files'].pop(file_name)
+            self.define_channel_llm_info(channel_id, channel_llm_info)
+            if not channel_llm_info['files']:
+                del channel_llm_info['files']
+                self.delete_vectorstore(channel_id)
+                
+
+        
     def delete_vectorstore(self, channel_id: str,
                            timestamp: Optional[str]='') -> None:
         if timestamp:

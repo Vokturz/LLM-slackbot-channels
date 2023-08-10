@@ -182,7 +182,6 @@ def create_handlers(bot: SlackBot) -> None:
         """
         values = view['state']['values']
         
-        
         # Extract channel ID and user ID
         private_metadata = json.loads(view['private_metadata'])
         channel_id = private_metadata["channel_id"]
@@ -401,20 +400,39 @@ def create_handlers(bot: SlackBot) -> None:
         if thread_ts:
             first_message = await extract_message_from_thread(bot, channel_id,
                                                               thread_ts, position=0)
+            
+            # Bot message as extra context
+            try:
+                second_message = await extract_message_from_thread(bot, channel_id,
+                                                                thread_ts, position=1)
+            except:
+                second_message = None
+
            # Generate the prompt
-            if 'files' not in first_message:
+            if 'files' not in first_message or (second_message and second_message['text'] == "QA thread deleted"):
                 # Is not a QA thread
                 prompt = PromptTemplate.from_template(template=prompts.THREAD_PROMPT)
                 qa_prompt = None
                 extra_context = ''
             else:
                 # Is a QA thread
+                if parsed_body['delete_qa']:
+                    for f in first_message['files']:
+                        bot.delete_file_from_channel(channel_id, f['name'], thread_ts)
+                    bot.delete_vectorstore(channel_id, thread_ts)
+                    msg = f"QA thread {thread_ts} deleted by user {parsed_body['user_id']}"
+                    bot.app.logger.info(msg)
+                    msg = msg.replace(f'{thread_ts} ', '')
+                    await say(text=f'_{msg}_', thread_ts=thread_ts)
+                    client = bot.app.client
+                    await client.chat_update(text="QA thread deleted",
+                                             channel=channel_id,
+                                             ts=second_message['ts'])
+                    return
+                
                 prompt = PromptTemplate.from_template(template=prompts.CONDENSE_QUESTION_PROMPT)
                 qa_prompt = PromptTemplate.from_template(template=prompts.QA_PROMPT)
 
-                # Bot message as extra context
-                second_message = await extract_message_from_thread(bot, channel_id,
-                                                                  thread_ts, position=1)
                 extra_context = second_message['text']
                 qa_prompt = qa_prompt.partial(extra_context=extra_context)
                 

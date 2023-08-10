@@ -50,6 +50,11 @@ def parse_format_body(body: Dict[str, Any],
     to_all = '!all' in query
     query = query.replace('!all', '') if to_all else query
     
+    # Check if message includes !delete-qa
+    delete_qa = '!delete-qa' in query
+    query = query.replace('!delete-qa', '') if delete_qa else query
+
+
     # Check if message includes !temp and extract it
     new_temp_match = re.search(r'!temp=([\d.]+)', query)
     new_temp = float(new_temp_match.group(1)) if new_temp_match else -1
@@ -65,6 +70,7 @@ def parse_format_body(body: Dict[str, Any],
            'channel_id' : channel_id,
            'new_temp' : new_temp if change_temp else -1,
            'to_all' : to_all,
+           'delete_qa' : delete_qa,
            'change_temp' : change_temp,
            'from_command' : "user_id" in body}
     return res
