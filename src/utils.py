@@ -458,7 +458,7 @@ async def extract_thread_conversation(bot: SlackBot, channel_id:str,
     actual_user = ''
     users = set()
     messages_history = []
-    for msg in messages:
+    for i, msg in enumerate(messages):
         user = msg['user']
         text = msg['text'].replace(f'<@{bot_user_id}>', '').strip()
         if user == bot_user_id:
@@ -466,7 +466,18 @@ async def extract_thread_conversation(bot: SlackBot, channel_id:str,
                 text = re.sub(r'\(_time: .*?\)', '', text)
                 text = re.sub(r'_Thread too long:.+_', '', text)
                 text = text.replace('\n\n', '\n')
-            messages_history.append(f'AI: {text}')
+            if i == 0:
+                # First message comes from /ask command
+                try:
+                    match = re.search("\*<@(.*)> asked\*: (.*)\n\*Answer\*:\n(.*)", text)
+                    user, user_text, bot_text = match.groups()
+                    user_text = match
+                    messages_history.append(f'<@{user}>: {user_text}')
+                    messages_history.append(f'AI: {bot_text}')
+                except:
+                    bot.app.logger.error('Error while extracting the first message from /ask command')
+            else:
+                messages_history.append(f'AI: {text}')
             actual_user = user
         else:
             text = re.sub(r'!temp=([\d.]+)', '', text)
