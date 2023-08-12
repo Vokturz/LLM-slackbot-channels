@@ -1,11 +1,10 @@
-
 # LLM Slack Bot Channels
 
 LLM-SlackBot-Channels is a Slack bot developed using the Slack Bolt framework. It allows users to interact with the bot through Slack channels by employing various commands. The bot leverages a Large Language Model (LLM) to generate responses based on both user input and channel-specific configurations. Unique to each channel, the bot can adopt different personalities and follow a customized set of instructions. This includes the ability to use it as an *agent*, integrating tools and documents.
 
 This repository mainly uses **langchain**. It supports the usage of open LLMs and embeddings, and OpenAI's models as well.
-<p align="center">
-<img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/4ed5b2b0-b9e3-4dec-8f59-569eb4a3c943" width="720" height="720">
+<p align="center" style="width:80%; max-width:600px;">
+  <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/4ed5b2b0-b9e3-4dec-8f59-569eb4a3c943" style="width:80%;">
 </p>
 
 See a video example here:
@@ -23,10 +22,9 @@ https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/d69106f3-3de1-4
 
 - **/modify_bot**
     This command allows you to customize the bot's personality, instructions, and temperature within the channel it's operating in. If `!no-notify` is included, then no notification is sent to the channel.
-    <p align="center">
-    <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/ed1cf3f1-bb67-4859-bf44-1b546031390b" width="300" height="400">
+    <p align="center" style="width:40%; max-width:300px;">
+      <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/ed1cf3f1-bb67-4859-bf44-1b546031390b" style="width:40%;">
     </p>
-
 
 - **/bot_info**
     This command presents the initial prompt used by the bot, as well as the default 'temperature' for generating responses.
@@ -54,8 +52,8 @@ https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/d69106f3-3de1-4
 
     - **QA Thread**: The bot responds to the user's message that contains the uploaded file(s), stating that a QA thread has been created with the uploaded file(s) and the context provided by the user.
         - If the user wants to remove the QA thread, use the flag `!delete-qa` while mentioning the bot.
-    <p align="center">
-    <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/fea57117-e939-4f44-9ef1-5ab26e315b7f" width="900" height="300">
+    <p align="center" style="width:100%; max-width:800px;">
+      <img src="https://github.com/Vokturz/LLM-slackbot-channels/assets/21696514/fea57117-e939-4f44-9ef1-5ab26e315b7f" style="width:100%;">
     </p>
     
     - **Upload to channel**: The file is upload to the channel and the tool *doc_retriever* appears in the list of tools once at least one file has been added to the channel. This tool take as context all the files uploaded by the users using this method.
