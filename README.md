@@ -1,3 +1,7 @@
+
+## ⚠️ This Project is Archived & No Longer Maintain
+This project was developed in mid-2023, a period of rapid change in the LLM ecosystem. It relies on severely outdated versions of key libraries and APIs, such as langchain and the OpenAI API.
+
 # LLM Slack Bot Channels
 
 LLM-SlackBot-Channels is a Slack bot developed using the Slack Bolt framework. It allows users to interact with the bot through Slack channels by employing various commands. The bot leverages a Large Language Model (LLM) to generate responses based on both user input and channel-specific configurations. Unique to each channel, the bot can adopt different personalities and follow a customized set of instructions. This includes the ability to use it as an *agent*, integrating tools and documents.
